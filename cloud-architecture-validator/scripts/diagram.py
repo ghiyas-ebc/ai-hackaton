@@ -101,10 +101,17 @@ def main():
     p.add_argument("--edges", required=True, help="'a>b,b>c'")
     p.add_argument("--to", default=None, help="target provider for translation")
     p.add_argument("--choose", default="", help="'src=tgt,src2=tgt2' (only with --to)")
+    p.add_argument("--format", default="json", choices=["json", "drawio"], help="output format")
+    p.add_argument("--output", default=None, help="output file (default: stdout)")
+    p.add_argument("--embed-icons", action="store_true", help="embed SVG icons as base64 in drawio output")
+    p.add_argument("--environment", default="poc", choices=["poc", "dev", "production"])
+    p.add_argument("--residency", default="none", choices=["none", "id", "eu", "us"])
+    p.add_argument("--sla", default="standard", choices=["best_effort", "standard", "critical"])
     a = p.parse_args()
 
     kg = kg_module.load()
     edges_raw = _parse_edges(a.edges)
+    context = {"environment": a.environment, "data_residency": a.residency, "sla_tier": a.sla}
 
     if a.to:
         from translate import translate
@@ -114,22 +121,32 @@ def main():
                 if "=" in part:
                     s, t = part.split("=", 1)
                     choices[s.strip()] = t.strip()
-        tresult = translate(edges_raw, a.to, choices=choices, kg=kg)
+        tresult = translate(edges_raw, a.to, choices=choices, context=context, kg=kg)
         if tresult["status"] == "AWAITING_DECISION":
             json.dump(tresult, sys.stdout, indent=2, ensure_ascii=False)
             print()
             sys.exit(0)
         edges = [tuple(e) for e in tresult.get("translated_edges", [])]
         mapping = tresult.get("mapping", {})
-        report = emit(edges, to_provider=a.to, translated_mapping=mapping, kg=kg)
+        if a.format == "drawio":
+            import emit_drawio
+            report = tresult.get("revalidation") or {"architecture": []}
+            emit_drawio.emit(edges, report, kg=kg, embed_icons=a.embed_icons, output_path=a.output)
+        else:
+            report = emit(edges, to_provider=a.to, translated_mapping=mapping, kg=kg)
+            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
+            print()
     else:
         from validate import validate
-        vresult = validate(edges_raw, kg=kg)
+        vresult = validate(edges_raw, context=context, kg=kg)
         edges = vresult["connectivity"]
-        report = emit(edges, kg=kg)
-
-    json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
-    print()
+        if a.format == "drawio":
+            import emit_drawio
+            emit_drawio.emit(edges, vresult, kg=kg, embed_icons=a.embed_icons, output_path=a.output)
+        else:
+            report = emit(edges, kg=kg)
+            json.dump(report, sys.stdout, indent=2, ensure_ascii=False)
+            print()
 
 
 if __name__ == "__main__":
