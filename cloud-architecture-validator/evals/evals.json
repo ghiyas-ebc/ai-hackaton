@@ -1,0 +1,71 @@
+{
+  "skill_name": "cloud-architecture-validator",
+  "note": "Prompts are written the way a salesperson or presales engineer would actually phrase them, not as technical specifications. Assertions target checkable behaviour, not diagram aesthetics. Prompts are kept in Indonesian on purpose: the skill instructions are English, but the skill must reply in the user's language, and these evals verify that.",
+  "evals": [
+    {
+      "id": "E01-serverless-db",
+      "prompt": "Tolong bikinin diagram arsitektur GCP buat proposal klien: ada web app, backend-nya pakai Cloud Run, terus connect ke Cloud SQL. Di depannya ada load balancer.",
+      "assertions": [
+        "runs scripts/validate.py rather than judging validity itself",
+        "inserts Serverless VPC Access on the Cloud Run -> Cloud SQL path instead of drawing a direct line",
+        "explains that a public path to the database will become a security-review finding",
+        "reports at least one layer-2 finding (the absent secret store)",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E02-cross-cloud",
+      "prompt": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Yang di GCP: Cloud Run, Cloud SQL, Pub/Sub, sama Cloud Load Balancing.",
+      "assertions": [
+        "runs scripts/translate.py",
+        "ASKS the user about Pub/Sub (Service Bus vs Event Grid) and Cloud Load Balancing (L4 / regional L7 / global L7) instead of choosing",
+        "does not translate GCP connectors one by one",
+        "after the choices are given, shows VNet Integration emerging from the Azure rules",
+        "surfaces caveats for every PARTIAL equivalent"
+      ]
+    },
+    {
+      "id": "E03-unknown-service",
+      "prompt": "Bisa cek arsitektur ini? Cloud Run nyambung ke Cloud Composer terus ke BigQuery.",
+      "assertions": [
+        "flags Cloud Composer as absent from the knowledge graph",
+        "does NOT infer the connection's validity from general knowledge",
+        "proposes adding it to the KG rather than simply refusing"
+      ]
+    },
+    {
+      "id": "E04-alternative-confusion",
+      "prompt": "Aku mau arsitektur yang pakai Cloud SQL dan Spanner dua-duanya, terus ada Cloud Run di depannya.",
+      "assertions": [
+        "explains that Cloud SQL and Spanner are mutually exclusive choices, not components used together",
+        "does not present both as a valid architecture without a warning",
+        "asks the question that decides between them"
+      ]
+    },
+    {
+      "id": "E05-residency",
+      "prompt": "Buat arsitektur produksi untuk klien bank di Indonesia: API di Cloud Run, data di Firestore, analitik di BigQuery.",
+      "assertions": [
+        "asks for or applies residency=id and environment=production",
+        "surfaces GOV-001 for the multi-region datastores",
+        "states the compliance implication in language that can be taken to the client, not jargon"
+      ]
+    },
+    {
+      "id": "E06-no-provider",
+      "prompt": "Bantu gambarin arsitektur buat aplikasi e-commerce sederhana dong.",
+      "assertions": [
+        "asks which provider before proceeding",
+        "does not default to GCP merely because it is first in the KG"
+      ]
+    },
+    {
+      "id": "E07-not-a-diagram-request",
+      "prompt": "Apa bedanya Event Grid sama Service Bus?",
+      "assertions": [
+        "answers directly from references/azure.md",
+        "does not force a diagram or run the validator unnecessarily"
+      ]
+    }
+  ]
+}

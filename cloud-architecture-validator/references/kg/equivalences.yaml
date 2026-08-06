@@ -1,0 +1,193 @@
+# Cross-provider equivalents. Read in both directions — no mirrored entries
+# needed.
+#
+# Two things make this file different from a plain equivalence list:
+#
+# 1. Explicit 1:N cardinality. One service can have several mutually exclusive
+#    equivalents (Pub/Sub -> Event Grid OR Service Bus). When more than one
+#    target exists, `selection_criteria` is REQUIRED and the question must be
+#    put to the user before anything is drawn. The original draft stored these
+#    as separate rows with no selection logic, so translation emitted two nodes
+#    for one role.
+#
+# 2. Connectors are not translated. Connector requirements are decided by the
+#    TARGET provider's rules, not inherited from the source. Old connectors are
+#    dropped before re-validation and new ones emerge from connectivity-rules.
+#    Translating them one by one produces duplicated or orphaned connectors.
+
+# Roles dropped during translation and regenerated at the target provider.
+regenerate_roles: [connector]
+
+equivalences:
+
+  - source: cloud-run
+    targets:
+      - id: azure-container-apps
+        level: CLOSE
+        caveats: >-
+          Container Apps requires an "environment" (a namespace-like construct)
+          to be provisioned first; Cloud Run is per-service directly.
+
+  - source: cloud-functions
+    targets:
+      - id: azure-functions
+        level: EXACT
+
+  - source: gke-autopilot
+    targets:
+      - id: aks
+        level: CLOSE
+        caveats: >-
+          Standard AKS still requires node pool management. AKS Automatic is the
+          closest match to Autopilot, but not all features are equivalent.
+
+  - source: compute-engine
+    targets:
+      - id: azure-vm
+        level: EXACT
+
+  - source: app-engine
+    targets:
+      - id: azure-app-service
+        level: CLOSE
+        caveats: >-
+          App Service is tied to an App Service Plan (capacity reserved up
+          front); App Engine Standard scales without provisioning capacity.
+
+  - source: cloud-sql
+    selection_criteria: >-
+      Which database engine is in use? Azure SQL Database is SQL Server only.
+    targets:
+      - id: azure-sql-database
+        level: CLOSE
+        when: SQL Server engine
+        caveats: >-
+          For MySQL/PostgreSQL the equivalent is Azure Database for
+          MySQL/PostgreSQL — a different product, not Azure SQL Database.
+
+  - source: spanner
+    selection_criteria: >-
+      Is the requirement the global scale, or the relational model?
+    targets:
+      - id: azure-sql-hyperscale
+        level: CLOSE
+        when: relational at large scale
+        caveats: >-
+          The closest relational match. Hyperscale scales storage and read
+          replicas but does not offer Spanner's strong cross-region consistency
+          — a difference that must be stated, not glossed over.
+      - id: azure-cosmos-db
+        level: PARTIAL
+        when: global distribution and flexible data model matter most
+        caveats: >-
+          Cosmos DB is multi-model NoSQL. Equating it with Spanner is a common
+          mistake — say clearly that the consistency guarantees and the data
+          model are different.
+
+  - source: firestore
+    targets:
+      - id: azure-cosmos-db
+        level: CLOSE
+        caveats: Use the Core (SQL) API for the closest document model match.
+
+  - source: bigtable
+    targets:
+      - id: azure-cosmos-db
+        level: PARTIAL
+        caveats: >-
+          Use the Cassandra API as the closest wide-column match — not the
+          default API.
+
+  - source: memorystore
+    targets:
+      - id: azure-cache-redis
+        level: EXACT
+
+  - source: cloud-storage
+    targets:
+      - id: azure-blob-storage
+        level: EXACT
+
+  - source: vpc
+    targets:
+      - id: azure-vnet
+        level: CLOSE
+        caveats: >-
+          A GCP VPC is global with per-region subnets; an Azure VNet is bound to
+          one region. A multi-region architecture using a single VPC on GCP will
+          need several VNets plus peering on Azure.
+
+  - source: cloud-load-balancing
+    selection_criteria: >-
+      Are L7 features needed (path/host routing, TLS termination, WAF), or is L4
+      (TCP/UDP) enough? GCP merges both; Azure splits them.
+    targets:
+      - id: azure-app-gateway
+        level: PARTIAL
+        when: regional L7 needed
+        caveats: WAF is available as a SKU on this node.
+      - id: azure-front-door
+        level: PARTIAL
+        when: global L7 / CDN needed
+        caveats: >-
+          The closest match for global Cloud Load Balancing, since Application
+          Gateway is regional.
+      - id: azure-load-balancer
+        level: PARTIAL
+        when: L4 is sufficient
+        caveats: Cannot terminate HTTP and cannot host a WAF.
+
+  - source: cloud-armor
+    targets:
+      - id: azure-app-gateway
+        level: CLOSE
+        as: feature
+        feature: waf
+        caveats: >-
+          On Azure, WAF is a policy on Application Gateway or Front Door rather
+          than a standalone product. Draw it as a badge on that node.
+
+  - source: pubsub
+    selection_criteria: >-
+      Can losing a single message be tolerated, and does ordering matter? GCP
+      merges the queue and event patterns into one product; Azure splits them.
+    targets:
+      - id: azure-service-bus
+        level: PARTIAL
+        when: delivery guarantees, ordering, dead-lettering needed
+      - id: azure-event-grid
+        level: PARTIAL
+        when: lightweight event distribution, fan-out to many subscribers
+
+  - source: dataflow
+    selection_criteria: >-
+      Is the use case batch or streaming? Dataflow unifies both; Azure splits
+      them.
+    targets:
+      - id: azure-data-factory
+        level: PARTIAL
+        when: batch ETL / orchestration
+      - id: azure-stream-analytics
+        level: PARTIAL
+        when: real-time streaming
+
+  - source: bigquery
+    targets:
+      - id: azure-synapse
+        level: CLOSE
+        caveats: >-
+          BigQuery is fully serverless per query; Synapse requires choosing a
+          capacity model (dedicated pool vs serverless) up front.
+
+  - source: vertex-ai
+    targets:
+      - id: azure-ml
+        level: CLOSE
+
+  - source: secret-manager
+    targets:
+      - id: azure-key-vault
+        level: CLOSE
+        caveats: >-
+          Key Vault combines secrets, keys, and certificates. On GCP,
+          cryptographic key management is separate in Cloud KMS.
