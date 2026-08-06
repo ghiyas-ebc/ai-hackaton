@@ -25,7 +25,7 @@ KG_DIR = Path(__file__).resolve().parent.parent / "references" / "kg"
 class KnowledgeGraph:
     def __init__(self, services, conn_rules, conn_fallback, arch_rules,
                  aliases, overrides, alternatives, equivalences,
-                 regenerate_roles):
+                 regenerate_roles, icons=None):
         self.services = {s["id"]: s for s in services}
         self.conn_rules = conn_rules
         self.conn_fallback = conn_fallback
@@ -36,6 +36,11 @@ class KnowledgeGraph:
         self.regenerate_roles = set(regenerate_roles)
         self.equivalences = equivalences
         self._eq_index = self._build_eq_index(equivalences)
+        self.icons = icons or {"categories": {}, "services": {}}
+        self._icon_root = {
+            "gcp": os.environ.get("CAV_GCP_ICON_DIR"),
+            "azure": os.environ.get("CAV_AZURE_ICON_DIR"),
+        }
 
     # -- resolusi id ------------------------------------------------------
     def resolve(self, service_id):
@@ -93,6 +98,60 @@ class KnowledgeGraph:
     def alternatives_for(self, service_id):
         return [a for a in self.alternatives if service_id in a["pair"]]
 
+    # -- icons ---------------------------------------------------------------
+    def icon_for(self, service_id):
+        """Return a resolved icon descriptor for a service.
+
+        If the official icon directory env var for the provider is set, the
+        result includes `icon_path` (an absolute Path). Otherwise `icon_path` is
+        None and the caller can still draw the label and generic shape.
+        """
+        svc = self.services.get(service_id)
+        if not svc:
+            return None
+        mapping = self.icons.get("services", {}).get(service_id)
+        if not mapping:
+            return {
+                "service_id": service_id,
+                "name": svc.get("name", service_id),
+                "provider": svc["provider"],
+                "type": "generic",
+                "icon_path": None,
+                "note": "No icon mapping defined.",
+            }
+        out = {
+            "service_id": service_id,
+            "name": svc.get("name", service_id),
+            "provider": mapping["provider"],
+            "type": mapping["type"],
+        }
+        if mapping.get("note"):
+            out["note"] = mapping["note"]
+        root = self._icon_root.get(mapping["provider"])
+        if mapping["type"] == "core":
+            out["icon"] = mapping["icon"]
+            if root:
+                out["icon_path"] = Path(root) / mapping["icon"]
+            else:
+                out["icon_path"] = None
+        elif mapping["type"] == "category":
+            cat = mapping["category"]
+            out["category"] = cat
+            cat_def = self.icons.get("categories", {}).get(mapping["provider"], {}).get(cat)
+            if cat_def:
+                out["category_name"] = cat_def["name"]
+                out["icon"] = cat_def["file"]
+                if root:
+                    out["icon_path"] = Path(root) / cat_def["file"]
+                else:
+                    out["icon_path"] = None
+            else:
+                out["note"] = f"Unknown category: {cat}"
+                out["icon_path"] = None
+        else:
+            out["icon_path"] = None
+        return out
+
 
 def _read(name):
     with open(KG_DIR / name, encoding="utf-8") as f:
@@ -112,6 +171,7 @@ def _load_local():
     arch = _read("architecture-rules.yaml")["rules"]
     ov = _read("overrides.yaml")
     eq = _read("equivalences.yaml")
+    icons = _read("icons.yaml")
     return KnowledgeGraph(
         services=services,
         conn_rules=conn["rules"],
@@ -122,6 +182,7 @@ def _load_local():
         alternatives=ov.get("alternatives", []) or [],
         equivalences=eq["equivalences"],
         regenerate_roles=eq.get("regenerate_roles", []),
+        icons=icons,
     )
 
 

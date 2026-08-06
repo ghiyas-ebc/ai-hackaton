@@ -19,6 +19,7 @@ Run this after every KG change. It guards three things:
 """
 
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import kg as kg_module
 from validate import _match, _should_reverse, validate
 
 FIXTURE = Path(__file__).resolve().parent.parent / "evals" / "regression_draft_edges.json"
+ICON_FIXTURE = Path(__file__).resolve().parent.parent / "evals" / "icon_regression.json"
 
 
 def check_integrity(kg):
@@ -81,6 +83,56 @@ def check_integrity(kg):
     return problems
 
 
+def check_icons(kg):
+    """Validate the icon mapping against the service table and env dirs.
+
+    Does not bundle icons; it only checks that the YAML mapping is complete
+    and that the referenced files exist when the official icon directories are
+    configured via CAV_GCP_ICON_DIR / CAV_AZURE_ICON_DIR.
+    """
+    problems = []
+    icon_root = {
+        "gcp": os.environ.get("CAV_GCP_ICON_DIR"),
+        "azure": os.environ.get("CAV_AZURE_ICON_DIR"),
+    }
+    svc_icons = kg.icons.get("services", {})
+    cats = kg.icons.get("categories", {})
+
+    # every service must have a mapping
+    for sid in kg.services:
+        if sid not in svc_icons:
+            problems.append(f"No icon mapping for service '{sid}'.")
+            continue
+        mapping = svc_icons[sid]
+        svc = kg.services[sid]
+        if svc["provider"] != mapping["provider"]:
+            problems.append(
+                f"Icon mapping for '{sid}' says provider '{mapping['provider']}' "
+                f"but services.yaml says '{svc['provider']}'."
+            )
+        if mapping["type"] == "category":
+            cat = mapping.get("category")
+            if not cat:
+                problems.append(f"Icon mapping for '{sid}' is category type but missing category.")
+            elif cat not in cats.get(svc["provider"], {}):
+                problems.append(f"Icon mapping for '{sid}' references unknown category '{cat}'.")
+        elif mapping["type"] == "core":
+            icon = mapping.get("icon")
+            if not icon:
+                problems.append(f"Icon mapping for '{sid}' is core type but missing icon path.")
+            elif icon_root[svc["provider"]]:
+                path = Path(icon_root[svc["provider"]]) / icon
+                if not path.exists():
+                    problems.append(f"Missing icon file for '{sid}': {path}")
+
+    # no icon entry for unknown service
+    for sid in svc_icons:
+        if sid not in kg.services:
+            problems.append(f"Icon mapping references unknown service '{sid}'.")
+
+    return problems
+
+
 def check_rule_reachability(kg):
     """Attribute every decidable directed pair to the rule that decides it.
 
@@ -131,6 +183,25 @@ def check_rule_reachability(kg):
         unreachable.append((rid, guess))
 
     return hits, unreachable
+
+
+def check_icon_regression(kg):
+    fixture = json.loads(ICON_FIXTURE.read_text(encoding="utf-8"))
+    passed, failed = 0, []
+    for case in fixture["cases"]:
+        got = kg.icon_for(case["service_id"])
+        ok = got and got["type"] == case["type"]
+        if ok and "category" in case:
+            ok = got.get("category") == case["category"]
+        if ok:
+            passed += 1
+        else:
+            failed.append(
+                f"{case['id']} {case['service_id']}: expected {case['type']}" +
+                (f"/{case['category']}" if "category" in case else "") +
+                f", got {got.get('type')}/{got.get('category')}"
+            )
+    return passed, failed, len(fixture["cases"])
 
 
 def check_regression(kg):
@@ -203,6 +274,24 @@ def main():
     for f in failed:
         print("  [X]", f)
 
+    print("\n== Icon mapping ==")
+    icon_problems = check_icons(kg)
+    if icon_problems:
+        for p in icon_problems:
+            print("  [!]", p)
+    else:
+        print("  clean")
+
+    print("\n== Icon regression ==")
+    icon_passed, icon_failed, icon_total = 0, [], 0
+    if ICON_FIXTURE.exists():
+        icon_passed, icon_failed, icon_total = check_icon_regression(kg)
+        print(f"  passed {icon_passed}/{icon_total}")
+        for f in icon_failed:
+            print("  [X]", f)
+    else:
+        print(f"  skipped ({ICON_FIXTURE.name} not found)")
+
     print("\n== Coverage ==")
     ids = list(kg.services)
     gcp = [i for i in ids if kg.services[i]["provider"] == "gcp"]
@@ -218,7 +307,7 @@ def main():
     print(f"  directed GCP pairs: {pairs}, decided: {covered} ({covered/pairs:.0%})")
     print("  (original draft: 20/462 = 4%)")
 
-    return 1 if (problems or failed or unreachable) else 0
+    return 1 if (problems or failed or unreachable or icon_problems or icon_failed) else 0
 
 
 if __name__ == "__main__":

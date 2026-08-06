@@ -37,10 +37,27 @@ and position rather than through ordering.
 ## Icons
 
 Do not re-bundle official Google/Microsoft icon sets into the skill — brand
-guidelines restrict it, and the icons change often (Azure especially). Use
-draw.io's built-in GCP/Azure shape libraries. Where a service isn't covered, use
-a generic shape with a clear label and say so, rather than borrowing a
-similar-looking icon from another service.
+guidelines restrict it, and the icons change often (Azure especially).
+
+Instead, resolve icons at runtime from locally installed official icon sets:
+
+- `CAV_GCP_ICON_DIR` -> root of *Google Cloud product icons* (e.g. `~/Documents/GCP Icons 2026`)
+- `CAV_AZURE_ICON_DIR` -> root of *Azure Public Service Icons* (e.g. `~/Documents/Azure Icons 2026/Azure_Public_Service_Icons/Icons`)
+
+The mapping is stored in `references/kg/icons.yaml` and covers 45 services via
+official unique icons, official generic category icons, or an explicit generic
+fallback. No icon files are copied into the repository.
+
+Coverage (verified against the 2026 official packs and `google-cloud-product-icons.pdf`):
+
+- **GCP**: 20/20 services mapped. 8 use unique core icons; 12 use generic
+category icons (e.g. Compute, Databases, Networking, Serverless Computing).
+- **Azure**: 23/25 services mapped to official per-service SVGs. 2 fall back to
+generic shapes with labels: Azure SQL Hyperscale and Azure VNet Integration.
+
+Run `python3 scripts/diagram.py --edges "..."` to get the resolved icon metadata
+for a given architecture. The emitter should prefer `icon_path` when present and
+`icon_exists` is true; otherwise draw a generic shape with the service label.
 
 ## Post-generation verification
 
