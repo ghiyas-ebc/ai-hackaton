@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cloud Architecture Validator — Knowledge Graph Explorer</title>
+<script src="lib/nvl.bundle.js"></script>
+<style>
+  :root { --bg:#f7f8fa; --panel:#ffffff; --border:#dde1e7; --text:#1a1a2e; --muted:#6b7280; --accent:#0077b6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+  #app { display:flex; height:100vh; }
+  #sidebar { width:290px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); padding:16px; overflow-y:auto; }
+  #canvas-wrap { flex:1; position:relative; background: radial-gradient(circle at 50% 40%, #1c2129 0%, #0c0e12 100%); }
+  #frame { width:100%; height:100%; }
+  #detail { width:320px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border); padding:16px; overflow-y:auto; }
+  h1 { font-size:15px; margin:0 0 4px; letter-spacing:.01em; }
+  .sub { color:var(--muted); font-size:11px; margin-bottom:16px; }
+  fieldset { border:1px solid var(--border); border-radius:8px; margin-bottom:14px; padding:10px; }
+  legend { font-size:10px; color:var(--muted); padding:0 6px; text-transform:uppercase; letter-spacing:.06em; }
+  label { display:flex; align-items:center; gap:6px; font-size:13px; margin:5px 0; cursor:pointer; }
+  input[type=text] { width:100%; padding:7px 10px; background:#fff; border:1px solid var(--border); color:var(--text); border-radius:20px; font-size:13px; }
+  .swatch { width:11px; height:11px; border-radius:50%; display:inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+  .stat { font-size:12px; color:var(--muted); margin-top:10px; }
+  .prop { font-size:12px; margin:5px 0; line-height:1.4; }
+  .prop b { color:var(--muted); font-weight:500; display:block; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; margin:2px 4px 2px 0; background:#eef1f5; color:#3a4250; border:1px solid var(--border); }
+  #detail h2 { font-size:15px; margin:0 0 2px; }
+  #detail .idline { color:var(--muted); font-size:11px; margin-bottom:14px; }
+  .verdict-pill { display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; color:#fff; }
+  .msg { color:#374151; margin-top:10px; font-size:13px; line-height:1.5; background:#f7f8fa; border-radius:8px; padding:10px; }
+  .placeholder { color:var(--muted); font-size:13px; margin-top:60px; text-align:center; padding:0 20px; }
+  .node-label { position:absolute; top:100%; left:50%; transform:translate(-50%,6px); color:#e8eaf0; font-size:12px; white-space:nowrap; pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,.8); }
+  .edge-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:10px; white-space:nowrap; pointer-events:none; background:#0c0e12; padding:1px 5px; border-radius:3px; }
+  #topbar { position:absolute; top:14px; left:14px; right:14px; display:flex; justify-content:space-between; pointer-events:none; }
+  #zoombox { pointer-events:auto; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; }
+  #zoombox button { border:none; background:none; width:32px; height:32px; cursor:pointer; font-size:16px; color:var(--text); }
+  #zoombox button:hover { background:#f2f4f7; }
+  ::-webkit-scrollbar { width:8px; }
+  ::-webkit-scrollbar-thumb { background:#d5d9e0; border-radius:4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h1>KG Explorer</h1>
+    <div class="sub">services.yaml + connectivity-rules.yaml, live-derived</div>
+
+    <input type="text" id="search" placeholder="Search nodes...">
+
+    <fieldset>
+      <legend>Provider</legend>
+      <label><input type="checkbox" class="f-provider" value="gcp" checked><span class="swatch" style="background:#4285F4"></span>GCP</label>
+      <label><input type="checkbox" class="f-provider" value="azure" checked><span class="swatch" style="background:#8661c5"></span>Azure</label>
+    </fieldset>
+
+    <fieldset id="category-box">
+      <legend>Category</legend>
+    </fieldset>
+
+    <fieldset>
+      <legend>Relationship verdict</legend>
+      <label><input type="checkbox" class="f-verdict" value="ALLOWED" checked><span class="swatch" style="background:#2e9e5b"></span>Allowed</label>
+      <label><input type="checkbox" class="f-verdict" value="ALLOWED_WITH_NOTE"><span class="swatch" style="background:#e8a33d"></span>Allowed w/ note</label>
+      <label><input type="checkbox" class="f-verdict" value="NEEDS_COMPONENT" checked><span class="swatch" style="background:#d64545"></span>Needs component</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cosmetic</legend>
+      <label><input type="checkbox" id="toggle-node-labels" checked> Node labels</label>
+      <label><input type="checkbox" id="toggle-edge-labels"> Relationship labels</label>
+    </fieldset>
+
+    <div class="stat" id="stats"></div>
+  </div>
+
+  <div id="canvas-wrap">
+    <div id="frame"></div>
+    <div id="topbar">
+      <div></div>
+      <div id="zoombox">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out">&minus;</button>
+        <button id="zoom-fit" title="Fit to screen">&#9737;</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail"><div class="placeholder">Click a node or relationship for details.</div></div>
+</div>
+
+<script>
+const PROVIDER_COLOR = { gcp: '#4285F4', azure: '#8661c5' };
+const VERDICT_COLOR = { ALLOWED: '#2e9e5b', ALLOWED_WITH_NOTE: '#e8a33d', NEEDS_COMPONENT: '#d64545' };
+
+let graphData = null;
+let nvl = null;
+let nodesById = new Map();
+let edgesRaw = [];
+let nvlNodeById = new Map();
+let nvlRelById = new Map();
+let presentNodeIds = new Set();
+let presentEdgeIds = new Set();
+let fitDone = false;
+let showNodeLabels = true;
+let showEdgeLabels = false;
+let selectedNodeId = null;
+let selectedEdgeId = null;
+let nodeLabelElsById = new Map();
+let edgeLabelElsById = new Map();
+
+const VERDICT_LABEL = { ALLOWED: 'allowed', ALLOWED_WITH_NOTE: 'note', NEEDS_COMPONENT: 'needs component' };
+
+// NVL's own canvas-based `caption` field turned out to be unreliable in this
+// build — text drawing silently no-ops after certain nvl.fit()/zoom sequences
+// (confirmed via isolated repro: same node, same props, works standalone,
+// breaks once fit() has run). `html` / `captionHtml` are NVL's documented
+// DOM-overlay escape hatches: NVL positions/scales a real DOM element over
+// each node or relationship itself, so rendering can't silently drop it.
+function makeNodeLabel(text) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'width:100%;height:100%;position:relative;';
+  const label = document.createElement('div');
+  label.className = 'node-label';
+  label.textContent = text;
+  wrap.appendChild(label);
+  return { wrap, label };
+}
+
+function makeEdgeLabel(text) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'width:100%;height:100%;position:relative;';
+  const label = document.createElement('div');
+  label.className = 'edge-label';
+  label.textContent = text;
+  wrap.appendChild(label);
+  return { wrap, label };
+}
+
+fetch('kg_graph.json')
+  .then(r => r.json())
+  .then(data => { graphData = data; init(data); })
+  .catch(err => {
+    document.getElementById('frame').innerHTML =
+      '<div class="placeholder">Could not load kg_graph.json — regenerate with scripts/export_kg_graph.py and serve this directory over http (not file://).<br><br>' + err.message + '</div>';
+  });
+
+function init(data) {
+  data.nodes.forEach(n => nodesById.set(n.id, n));
+  edgesRaw = data.edges;
+
+  const categories = [...new Set(data.nodes.map(n => n.category))].sort();
+  const catBox = document.getElementById('category-box');
+  categories.forEach(c => {
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="checkbox" class="f-category" value="${c}" checked> ${c}`;
+    catBox.appendChild(label);
+  });
+
+  data.nodes.forEach(n => {
+    const { wrap, label } = makeNodeLabel(n.name);
+    nodeLabelElsById.set(n.id, label);
+    nvlNodeById.set(n.id, {
+      id: n.id,
+      color: PROVIDER_COLOR[n.provider] || '#9aa3b2',
+      size: 36,
+      html: wrap,
+    });
+  });
+  data.edges.forEach((e, i) => {
+    const id = 'e' + i;
+    const { wrap, label } = makeEdgeLabel(VERDICT_LABEL[e.verdict] || e.verdict);
+    label.style.color = VERDICT_COLOR[e.verdict] || '#9aa3b2';
+    edgeLabelElsById.set(id, label);
+    nvlRelById.set(id, {
+      id,
+      from: e.source,
+      to: e.target,
+      color: VERDICT_COLOR[e.verdict] || '#9aa3b2',
+      width: 1.2,
+      captionHtml: wrap,
+    });
+  });
+
+  nvl = new window.__NVL__.NVL(
+    document.getElementById('frame'),
+    [],
+    [],
+    {
+      disableTelemetry: true,
+      layout: 'forceDirected',
+      initialZoom: 0.7,
+      renderer: 'canvas',
+    },
+    {
+      onError: err => console.error('NVL error:', err),
+      onLayoutDone: () => { if (!fitDone) { fitDone = true; nvl.fit([...presentNodeIds]); } },
+    }
+  );
+
+  const { PanInteraction, ZoomInteraction, DragNodeInteraction, ClickInteraction, HoverInteraction } = window.__NVL__;
+  new PanInteraction(nvl);
+  new ZoomInteraction(nvl);
+  new DragNodeInteraction(nvl);
+
+  const hover = new HoverInteraction(nvl, { drawShadowOnHover: true });
+  hover.updateCallback('onHover', (el, hits, evt) => {
+    document.getElementById('frame').style.cursor = hits.nodes.length || hits.relationships.length ? 'pointer' : 'default';
+  });
+
+  const click = new ClickInteraction(nvl);
+  click.updateCallback('onNodeClick', node => { clearSelection(); selectedNodeId = node.id; nvl.addAndUpdateElementsInGraph([{ id: node.id, selected: true }], []); showNodeDetail(node.id); });
+  click.updateCallback('onRelationshipClick', rel => { clearSelection(); selectedEdgeId = rel.id; nvl.addAndUpdateElementsInGraph([], [{ id: rel.id, selected: true, width: 3 }]); showEdgeDetail(rel.id); });
+  click.updateCallback('onCanvasClick', () => {
+    clearSelection();
+    document.getElementById('detail').innerHTML = '<div class="placeholder">Click a node or relationship for details.</div>';
+  });
+
+  document.getElementById('zoom-in').addEventListener('click', () => nvl.setZoom(nvl.getScale() * 1.3));
+  document.getElementById('zoom-out').addEventListener('click', () => nvl.setZoom(nvl.getScale() / 1.3));
+  document.getElementById('zoom-fit').addEventListener('click', () => nvl.fit([...presentNodeIds]));
+
+  document.querySelectorAll('.f-provider, .f-category, .f-verdict').forEach(el =>
+    el.addEventListener('change', applyFilters));
+  document.getElementById('search').addEventListener('input', applyFilters);
+
+  document.getElementById('toggle-node-labels').addEventListener('change', evt => {
+    showNodeLabels = evt.target.checked;
+    nodeLabelElsById.forEach(el => { el.style.display = showNodeLabels ? '' : 'none'; });
+  });
+  document.getElementById('toggle-edge-labels').addEventListener('change', evt => {
+    showEdgeLabels = evt.target.checked;
+    edgeLabelElsById.forEach(el => { el.style.display = showEdgeLabels ? '' : 'none'; });
+  });
+  edgeLabelElsById.forEach(el => { el.style.display = showEdgeLabels ? '' : 'none'; });
+
+  applyFilters();
+}
+
+function clearSelection() {
+  if (selectedNodeId && presentNodeIds.has(selectedNodeId)) {
+    nvl.addAndUpdateElementsInGraph([{ id: selectedNodeId, selected: false }], []);
+  }
+  if (selectedEdgeId && presentEdgeIds.has(selectedEdgeId)) {
+    nvl.addAndUpdateElementsInGraph([], [{ id: selectedEdgeId, selected: false, width: 1.2 }]);
+  }
+  selectedNodeId = null;
+  selectedEdgeId = null;
+}
+
+function buildNodeElement(id) {
+  return nvlNodeById.get(id);
+}
+
+function buildRelElement(id) {
+  return nvlRelById.get(id);
+}
+
+function activeSet(cls) {
+  return new Set([...document.querySelectorAll('.f-' + cls + ':checked')].map(el => el.value));
+}
+
+function applyFilters() {
+  const providers = activeSet('provider');
+  const categories = activeSet('category');
+  const verdicts = activeSet('verdict');
+  const q = document.getElementById('search').value.trim().toLowerCase();
+
+  const wantNodeIds = new Set();
+  for (const n of nodesById.values()) {
+    const match = providers.has(n.provider) && categories.has(n.category) &&
+      (!q || n.name.toLowerCase().includes(q) || n.id.toLowerCase().includes(q));
+    if (match) wantNodeIds.add(n.id);
+  }
+
+  const wantEdgeIds = new Set();
+  edgesRaw.forEach((e, i) => {
+    if (wantNodeIds.has(e.source) && wantNodeIds.has(e.target) && verdicts.has(e.verdict)) {
+      wantEdgeIds.add('e' + i);
+    }
+  });
+
+  const relsToRemove = [...presentEdgeIds].filter(id => !wantEdgeIds.has(id));
+  const nodesToRemove = [...presentNodeIds].filter(id => !wantNodeIds.has(id));
+  if (relsToRemove.length) nvl.removeRelationshipsWithIds(relsToRemove);
+  if (nodesToRemove.length) nvl.removeNodesWithIds(nodesToRemove);
+
+  const nodesToAdd = [...wantNodeIds].filter(id => !presentNodeIds.has(id)).map(buildNodeElement);
+  const relsToAdd = [...wantEdgeIds].filter(id => !presentEdgeIds.has(id)).map(buildRelElement);
+  if (nodesToAdd.length || relsToAdd.length) nvl.addAndUpdateElementsInGraph(nodesToAdd, relsToAdd);
+
+  presentNodeIds = wantNodeIds;
+  presentEdgeIds = wantEdgeIds;
+
+  if (selectedNodeId && !presentNodeIds.has(selectedNodeId)) selectedNodeId = null;
+  if (selectedEdgeId && !presentEdgeIds.has(selectedEdgeId)) selectedEdgeId = null;
+
+  document.getElementById('stats').textContent =
+    `${wantNodeIds.size} / ${nodesById.size} nodes shown`;
+}
+
+function showNodeDetail(id) {
+  const n = nodesById.get(id);
+  if (!n) return;
+  const rolesHtml = (n.roles || []).map(r => `<span class="badge">${r}</span>`).join('');
+  document.getElementById('detail').innerHTML = `
+    <h2>${n.name}</h2>
+    <div class="idline">${n.id} &middot; ${n.provider}</div>
+    <div class="prop"><b>category</b>${n.category}</div>
+    <div class="prop"><b>tier</b>${n.tier || '—'}</div>
+    <div class="prop"><b>network_placement</b>${n.network_placement || '—'}</div>
+    <div class="prop"><b>reachability</b>${n.reachability || '—'}</div>
+    <div class="prop"><b>region_scope</b>${n.region_scope || '—'}</div>
+    <div class="prop"><b>roles</b>${rolesHtml}</div>
+  `;
+}
+
+function showEdgeDetail(edgeId) {
+  const i = parseInt(edgeId.slice(1), 10);
+  const e = edgesRaw[i];
+  if (!e) return;
+  const src = nodesById.get(e.source);
+  const dst = nodesById.get(e.target);
+  document.getElementById('detail').innerHTML = `
+    <h2>${src.name} &rarr; ${dst.name}</h2>
+    <div class="idline">${e.rule_id || '—'}</div>
+    <span class="verdict-pill" style="background:${VERDICT_COLOR[e.verdict]}">${e.verdict}</span>
+    ${e.severity ? '<span class="prop"><b>severity</b>' + e.severity + '</span>' : ''}
+    ${e.insert_component ? '<div class="prop"><b>inserts</b>' + e.insert_component.name + '</div>' : ''}
+    <div class="msg">${e.message}</div>
+  `;
+}
+</script>
+</body>
+</html>
