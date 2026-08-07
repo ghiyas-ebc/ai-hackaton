@@ -1,9 +1,16 @@
 ---
-name: cloud-architecture-validator
+name: cloud-architecture-validator-create-architect
 description: Validate cloud architectures (GCP and Azure) for structural, security, reliability, cost, and data-residency problems, and translate architectures between providers. Use this skill whenever someone describes a system made of cloud services and wants it reviewed, sketched, or diagrammed; whenever a non-technical user (sales, presales, account manager) needs an architecture for a client PoC or proposal; whenever someone asks for a cross-cloud equivalent ("what's the Azure equivalent of Cloud Run?", "what would this GCP architecture look like on Azure?"); and whenever an existing diagram needs a sanity check before it goes to a client. Do not answer connectivity or equivalence questions from general knowledge — run the validator scripts first, because plausible-sounding but wrong cloud architecture is exactly the failure mode this skill exists to prevent.
 ---
 
-# Cloud Architecture Validator
+# Cloud Architecture Validator — Create Architecture
+
+This is the core validate/translate/diagram skill — the one referred to
+elsewhere as just "the validator." Sibling skills:
+`cloud-architecture-validator-show-kg` browses the KG this skill owns;
+`cloud-architecture-validator-add` and `cloud-architecture-validator-init`
+add to and (re)populate it. This skill owns `references/kg/` — the others
+read it, none of them fork or duplicate it.
 
 This is not a diagram generator. Plenty of tools already turn text into boxes
 and arrows. What this skill does: **check whether the proposed architecture will
@@ -155,6 +162,15 @@ Validity is not stored as a list of pairs; it is derived from node properties by
 `references/kg/connectivity-rules.yaml`. Adding a service means adding one entry
 to `references/kg/services.yaml` with the right properties — its connections are
 covered immediately.
+
+For adding a single service with brand/category/description/reference-URL/icon
+validated by an agent before it's written, use `cloud-architecture-validator-
+add` rather than editing `services.yaml` directly — same underlying file, but
+with the human-confirmation gate D6 requires (see this repo's top-level
+CLAUDE.md: a wrong `reachability` value fails silently across ~20 pairs, and
+`check_kg.py` cannot catch it, so nothing writes this file unattended). For
+bulk (re)population from an external catalog, that's
+`cloud-architecture-validator-init`.
 
 After every change:
 

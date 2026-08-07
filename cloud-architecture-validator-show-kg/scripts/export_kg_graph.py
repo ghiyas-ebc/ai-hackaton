@@ -13,6 +13,11 @@ BLOCKED and UNCOVERED pairs are left out on purpose: this is a map of what the
 KG says CAN connect, not an exhaustive N^2 matrix. Cross-provider pairs are
 always BLOCKED by CONN-CROSS-PROVIDER, so only same-provider pairs are checked.
 
+This skill owns no KG data of its own — it reads cloud-architecture-validator-
+create-architect's, which must be installed alongside it. kg.py resolves
+references/kg/ relative to its own file location, so importing it from there
+(rather than copying it here) keeps the KG single-sourced.
+
 Usage:
     python3 export_kg_graph.py --output ../visualizations/kg_graph.json
 """
@@ -23,7 +28,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
+CREATE_ARCHITECT_SCRIPTS = (
+    Path(__file__).resolve().parent.parent.parent
+    / "cloud-architecture-validator-create-architect" / "scripts"
+)
+if not CREATE_ARCHITECT_SCRIPTS.is_dir():
+    raise SystemExit(
+        "cloud-architecture-validator-create-architect not found as a sibling "
+        f"skill directory (looked in {CREATE_ARCHITECT_SCRIPTS}). "
+        "show-kg reads its KG rather than owning a copy — install both skills."
+    )
+sys.path.append(str(CREATE_ARCHITECT_SCRIPTS))
 
 import kg as kg_module
 from validate import validate_connectivity

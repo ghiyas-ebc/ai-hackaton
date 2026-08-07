@@ -9,7 +9,7 @@ skill referenced files inside the GCP skill's folder, so installing it alone
 left it without its own workflow.
 
 ```
-cloud-architecture-validator/
+cloud-architecture-validator-create-architect/
 ├── SKILL.md                  <- required, must be at the root
 ├── README.md                 <- this file (not read by Claude at runtime)
 ├── references/               <- loaded into context only when needed
@@ -29,15 +29,15 @@ entry inside the archive:
 
 ```bash
 cd /path/containing/the/folder
-rm -rf cloud-architecture-validator/scripts/__pycache__
-zip -r cloud-architecture-validator.zip cloud-architecture-validator
+rm -rf cloud-architecture-validator-create-architect/scripts/__pycache__
+zip -r cloud-architecture-validator-create-architect.zip cloud-architecture-validator
 ```
 
 Verify before uploading:
 
 ```bash
-unzip -l cloud-architecture-validator.zip | head
-# the first paths must start with cloud-architecture-validator/
+unzip -l cloud-architecture-validator-create-architect.zip | head
+# the first paths must start with cloud-architecture-validator-create-architect/
 ```
 
 Two things that quietly break an upload: zipping from inside the folder (so
@@ -45,7 +45,7 @@ Two things that quietly break an upload: zipping from inside the folder (so
 `__MACOSX/` and `.DS_Store` entries. Strip the latter with:
 
 ```bash
-zip -r cloud-architecture-validator.zip cloud-architecture-validator \
+zip -r cloud-architecture-validator-create-architect.zip cloud-architecture-validator \
   -x "*.DS_Store" -x "__MACOSX/*"
 ```
 

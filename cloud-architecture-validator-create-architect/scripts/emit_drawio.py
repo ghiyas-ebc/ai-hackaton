@@ -102,8 +102,8 @@ def _image_style(icon_path):
     b64 = _embed_svg(icon_path)
     return (
         f"shape=image;image=data:image/svg+xml;base64,{b64};"
-        "aspect=fixed;html=1;verticalLabelPosition=bottom;verticalAlign=top;"
-        "align=center;labelPosition=center;fontSize=12;"
+        "html=1;verticalLabelPosition=bottom;verticalAlign=top;"
+        "align=center;"
     )
 
 
@@ -265,7 +265,7 @@ def _node_size(node):
 
 def _build_root():
     root = ET.Element("root")
-    _cell(root, "0", "0")
+    _cell(root, "0", None)
     _cell(root, "1", "0")
     return root
 

@@ -1,31 +1,61 @@
 # CLAUDE.md
 
 Orientation for any agent working in this repository. Read this before changing
-anything under `references/kg/` or `scripts/`.
+anything under `cloud-architecture-validator-create-architect/references/kg/`
+or any of the four skills' `scripts/`.
 
 ## What this is
 
-A Claude Skill that validates cloud architectures (GCP, Azure) and translates
-them between providers. Its users are salespeople and presales engineers who do
-not design cloud architecture for a living, producing material that goes in
-front of a client's architect.
+Four Claude Skills, split from one, covering the lifecycle of a knowledge
+graph of cloud services (GCP, Azure) and the architectures built from it:
+
+- **`cloud-architecture-validator-create-architect`** — the core skill.
+  Validates architectures for structural, security, reliability, cost, and
+  data-residency problems, and translates them between providers. Owns
+  `references/kg/` — the single source of truth the other three read.
+- **`cloud-architecture-validator-show-kg`** — read-only, Neo4j-Bloom-style
+  visual explorer of the KG itself (not a specific architecture). Has no KG
+  of its own; imports create-architect's `kg.py`/`validate.py` directly so it
+  can't drift.
+- **`cloud-architecture-validator-add`** — design stub. Add one service to
+  the KG, agent-verified where verification is possible (brand, category,
+  description, references_url, icon), human-gated where it isn't
+  (`network_placement`, `reachability`, `roles` — see D6).
+- **`cloud-architecture-validator-init`** — design stub. Bulk (re)populate
+  the KG from an external public catalog, versioned so a bad sync reverts
+  cleanly. Source/schema/auth not yet specified.
+
+Its users are salespeople and presales engineers who do not design cloud
+architecture for a living, producing material that goes in front of a
+client's architect.
 
 It is not a diagram generator. The value is in catching things that would
 otherwise be caught in a client design review, or worse, after go-live.
 
 ## Commands
 
+All paths below are relative to `cloud-architecture-validator-create-architect/`
+unless stated otherwise — that is the skill that owns the KG and the core
+scripts.
+
 ```bash
 python3 scripts/check_kg.py                      # integrity + regression + coverage
 python3 scripts/validate.py --edges "a>b,b>c"    # two-layer validation
 python3 scripts/translate.py --edges "..." --to azure
 python3 tools/sync_provider_inventory.py --list tools/sample_resource_types.txt
+
+# from cloud-architecture-validator-show-kg/scripts/ — reads the sibling KG above
+python3 export_kg_graph.py --output ../visualizations/kg_graph.json
 ```
 
 `check_kg.py` must report clean integrity, **37/37 regression**, and coverage
 **≥80%** before anything ships. A coverage drop means a rule silently narrowed.
 
 ## Invariants — do not break these without an explicit decision
+
+Unqualified `scripts/`, `references/`, and `tools/` paths below are all
+inside `cloud-architecture-validator-create-architect/` — the skill that owns
+them.
 
 1. **No LLM in the decision path.** Verdicts come from `scripts/validate.py`.
    The model parses descriptions and communicates results; it never judges
@@ -104,6 +134,23 @@ carries this rule explicitly, and `evals/evals.json` keeps its prompts in
 Indonesian to test it. The performance premise behind English instructions is
 plausible but unmeasured — see open questions.
 
+**D9 — Four skills, split by workflow rather than by provider.** D3 said split
+again only when AWS/Huawei land — that threshold hasn't been hit, and this
+split doesn't contradict it: D3 was about per-provider file growth, this is a
+different axis. What changed: validating an architecture, exploring the KG,
+adding one service, and bulk-populating the KG are four different jobs with
+four different risk profiles — the first is read-only and safe to run
+constantly, the second is read-only and exploratory, the third and fourth
+both write to `services.yaml` and need the human-confirmation gate D6
+requires, but at very different scale (one entry vs. many). Bundling them
+into one skill meant `-add`/`-init` requests would load the entire
+validate/translate workflow into context even when the user just wanted to
+browse the graph. `create-architect` still owns `references/kg/` alone; the
+other three read it via relative sibling paths and fail loudly if it isn't
+installed alongside them, rather than forking a copy. `-init` and `-add` are
+currently design stubs — SKILL.md plus a script that refuses to run — not
+working tools; see their own `SKILL.md` for what's actually missing.
+
 ## Open questions
 
 Genuinely unresolved. Do not present any of these as settled.
@@ -124,6 +171,15 @@ Genuinely unresolved. Do not present any of these as settled.
 - **The clustering heuristic in the sync tool is crude** — splits on the first
   two tokens. Fine for the sample; likely wrong somewhere on real provider data.
   Fix after seeing it fail, not before.
+- **`cloud-architecture-validator-init`'s data source is unspecified.** Bulk
+  sync "from a public database" was requested without saying which one, its
+  schema, or its access method — none of that is decided, let alone built.
+- **`cloud-architecture-validator-init`'s versioning scheme is unspecified.**
+  "Rollback a bad sync" is the requirement; commit-based vs. snapshot-based
+  vs. something else is not decided.
+- **`cloud-architecture-validator-add`'s human-confirmation UX is unspecified.**
+  Likely mirrors `tools/review_queue.yaml`'s per-candidate question format,
+  but that's a guess, not a decision.
 
 ## Style
 

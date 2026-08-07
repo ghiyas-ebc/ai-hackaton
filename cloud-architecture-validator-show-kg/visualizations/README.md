@@ -1,14 +1,15 @@
 # KG explorer
 
-Explores the source knowledge graph itself (`references/kg/services.yaml` +
-`connectivity-rules.yaml`) — a neo4j-browser-style view, separate from the
+Explores the source knowledge graph itself (`services.yaml` +
+`connectivity-rules.yaml`, owned by the sibling `cloud-architecture-validator-
+create-architect` skill) — a neo4j-browser-style view, separate from that
 skill's own draw.io output for a user-described architecture.
 
 ## Regenerate the graph
 
-Edges come from `validate_connectivity()` in `scripts/validate.py` — the exact
-function the skill uses at runtime — run over every same-provider service
-pair. No separate/reinvented rule logic.
+Edges come from `validate_connectivity()` in create-architect's
+`scripts/validate.py` — the exact function that skill uses at runtime — run
+over every same-provider service pair. No separate/reinvented rule logic.
 
 ```bash
 cd scripts
@@ -55,7 +56,7 @@ import { PanInteraction, ZoomInteraction, DragNodeInteraction, ClickInteraction,
 window.__NVL__ = { NVL, PanInteraction, ZoomInteraction, DragNodeInteraction, ClickInteraction, HoverInteraction };
 JS
 npx esbuild entry.js --bundle --minify --format=iife --outfile=nvl.bundle.js
-cp nvl.bundle.js <repo>/cloud-architecture-validator/visualizations/lib/
+cp nvl.bundle.js <repo>/cloud-architecture-validator-show-kg/visualizations/lib/
 ```
 
 **Do not use NVL's built-in `caption`/`captionAlign`/`captionSize` fields on
