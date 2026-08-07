@@ -151,6 +151,25 @@ installed alongside them, rather than forking a copy. `-init` and `-add` are
 currently design stubs — SKILL.md plus a script that refuses to run — not
 working tools; see their own `SKILL.md` for what's actually missing.
 
+**D10 — KG checkpoints are pull-once snapshots, triggered by `check_kg.py`
+passing, never a runtime dependency.** Answers the versioning half of
+`cloud-architecture-validator-init`'s design (the data-source half is still
+open — see below). A checkpoint is a zip of the entire `references/kg/`
+directory (all six files — they interact, a partial snapshot isn't a real
+rollback point) plus a manifest: version tag, git commit SHA, timestamp,
+node count, regression result, coverage %, and a SHA-256 of the zip. Trigger
+is `check_kg.py` reporting clean — a checkpoint means "this state passed the
+gate," not "someone hit save." Storage is either a GitHub Release (zero new
+infrastructure, versioned, has a notes field for the manifest) or a GCS
+bucket with object versioning (fits if `-init` ends up living in GCP
+anyway) — not decided yet, but the shape doesn't depend on that choice.
+**Same condition as D1 applies:** this is authoring/distribution only.
+`-init` pulls a pinned checkpoint once and writes local YAML;
+`create-architect`'s live validate path never reads from GCS or GitHub at
+request time. GCS specifically would reintroduce the exact failure D1
+already rejected BigQuery for — you can't demo an Azure architecture off a
+GCP-credentialed backing store without a GCP account in hand.
+
 ## Open questions
 
 Genuinely unresolved. Do not present any of these as settled.
@@ -179,9 +198,6 @@ Genuinely unresolved. Do not present any of these as settled.
 - **`cloud-architecture-validator-init`'s data source is unspecified.** Bulk
   sync "from a public database" was requested without saying which one, its
   schema, or its access method — none of that is decided, let alone built.
-- **`cloud-architecture-validator-init`'s versioning scheme is unspecified.**
-  "Rollback a bad sync" is the requirement; commit-based vs. snapshot-based
-  vs. something else is not decided.
 - **`cloud-architecture-validator-add`'s human-confirmation UX is unspecified.**
   Likely mirrors `tools/review_queue.yaml`'s per-candidate question format,
   but that's a guess, not a decision.
