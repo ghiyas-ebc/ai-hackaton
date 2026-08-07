@@ -159,16 +159,33 @@ directory (all six files — they interact, a partial snapshot isn't a real
 rollback point) plus a manifest: version tag, git commit SHA, timestamp,
 node count, regression result, coverage %, and a SHA-256 of the zip. Trigger
 is `check_kg.py` reporting clean — a checkpoint means "this state passed the
-gate," not "someone hit save." Storage is either a GitHub Release (zero new
-infrastructure, versioned, has a notes field for the manifest) or a GCS
-bucket with object versioning (fits if `-init` ends up living in GCP
-anyway) — not decided yet, but the shape doesn't depend on that choice.
-**Same condition as D1 applies:** this is authoring/distribution only.
-`-init` pulls a pinned checkpoint once and writes local YAML;
-`create-architect`'s live validate path never reads from GCS or GitHub at
-request time. GCS specifically would reintroduce the exact failure D1
-already rejected BigQuery for — you can't demo an Azure architecture off a
+gate," not "someone hit save." Storage is a GitHub Release, not GCS — decided
+in favor of zero new infrastructure and no cloud SDK dependency, consistent
+with `-init`'s own fetch side (see below): both directions of this skill stay
+on plain HTTP/`gh` CLI, no `google-cloud-storage` client anywhere in the
+dependency tree. **Same condition as D1 applies regardless of backend:** this
+is authoring/distribution only. `-init` pulls a pinned checkpoint once and
+writes local YAML; `create-architect`'s live validate path never reads from
+GitHub at request time. This is also why GCS was ruled out and not just
+deprioritized — it would reintroduce the exact failure D1 already rejected
+BigQuery for, and worse: you can't demo an Azure architecture off a
 GCP-credentialed backing store without a GCP account in hand.
+
+**D11 — `-init` fetches over plain HTTP, no cloud SDK.** The external catalog
+`-init` bulk-syncs from is read via a plain `GET` against a public URL —
+standard library only, no auth, no `google-cloud-storage` or any other cloud
+client dependency. Keeps `-init` as dependency-light as create-architect
+itself (PyYAML and nothing else — root invariant #3). If the real source
+later needs auth or isn't reachable over plain HTTPS, that's a reason to
+reconsider the source, not a reason to add an SDK. The specific URL, its
+schema, and update cadence are still unspecified — this decision fixes the
+*method*, not the *source*.
+
+**D12 — `-add` writes directly to `services.yaml`, no outside store.** The
+confirmed entry lands in place, the same file and the same way a manual edit
+would land it. No staging file, no second copy of the data living anywhere
+else — one file, one write path, whether the edit came from a person or from
+`-add`'s agent-assisted flow.
 
 ## Open questions
 
@@ -195,9 +212,9 @@ Genuinely unresolved. Do not present any of these as settled.
 - **The clustering heuristic in the sync tool is crude** — splits on the first
   two tokens. Fine for the sample; likely wrong somewhere on real provider data.
   Fix after seeing it fail, not before.
-- **`cloud-architecture-validator-init`'s data source is unspecified.** Bulk
-  sync "from a public database" was requested without saying which one, its
-  schema, or its access method — none of that is decided, let alone built.
+- **`cloud-architecture-validator-init`'s actual source URL is unspecified.**
+  D11 fixed the access method (plain HTTP `GET`, no SDK) — the specific URL,
+  its schema, and update cadence are still not decided, let alone built.
 - **`cloud-architecture-validator-add`'s human-confirmation UX is unspecified.**
   Likely mirrors `tools/review_queue.yaml`'s per-candidate question format,
   but that's a guess, not a decision.

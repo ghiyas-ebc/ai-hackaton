@@ -50,6 +50,16 @@ pattern — automate the fetch, never automate the classification.
 `CAV_GCP_ICON_DIR`/`CAV_AZURE_ICON_DIR` env vars) — this part is genuinely
 mechanical and safe for the agent to do outright.
 
+## Writes in place — decided, not a TODO
+
+The confirmed entry lands directly in `cloud-architecture-validator-create-
+architect`'s `references/kg/services.yaml`, appended the same way a human
+edit would append it. No separate staging file, no outside store, no second
+copy of the data anywhere. This skill must not grow a second way to mutate
+`services.yaml` that `check_kg.py` doesn't already cover — one file, one
+write path, whether the edit came from a person or from this skill's
+agent-assisted flow.
+
 ## Before implementing this for real
 
 1. Decide the exact human-confirmation UX — a single question batch per
@@ -57,9 +67,6 @@ mechanical and safe for the agent to do outright.
    four-classification-question shape from create-architect.
 2. Decide how a rejected/edited proposal round-trips back to the agent for
    correction, versus how many free retries before it's a hard human edit.
-3. Write the entry through the same path a human edit would use — this skill
-   should not grow a second way to mutate `services.yaml` that
-   `check_kg.py` doesn't already cover.
-4. Run `check_kg.py` after every add, same as a manual edit — coverage must
+3. Run `check_kg.py` after every add, same as a manual edit — coverage must
    not drop, and the new entries must show up in reachability output for at
    least one rule.
