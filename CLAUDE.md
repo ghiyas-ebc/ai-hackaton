@@ -187,37 +187,78 @@ would land it. No staging file, no second copy of the data living anywhere
 else — one file, one write path, whether the edit came from a person or from
 `-add`'s agent-assisted flow.
 
+**D13 — Verify rendering against a small real subset before trusting it
+broadly.** `references/rendering.md`'s layout rules are marked unverified
+heuristics, and nobody has opened `emit_drawio.py`'s output in real draw.io
+to confirm icons/layout actually look right. Rather than verify all 45
+services up front, verify the ~10 most likely to appear in an actual sales
+demo first (load-balancer → compute → datastore patterns, the ones already
+used as examples throughout this doc), fix what's ugly, expand coverage as
+real usage surfaces more combinations. A broken diagram in front of a client
+is worse than no diagram, but this doesn't need to block on covering
+services nobody will draw yet.
+
+**D14 — Untuned Layer 2 rules render as INFO, not their nominal severity,
+until measured.** `REL-002` and `OPS-001` specifically — their severities
+were reasoned, not measured against real proposals. Downgrading them to
+INFO until they've seen real usage keeps the tool honest about what it
+actually knows, consistent with the `UNCOVERED`-over-guessing principle
+already governing Layer 1. Cheap and reversible: restore nominal severity
+once a rule has been checked against real client material and holds up.
+
+**D15 — Evals must run against a live Claude instance before real client
+use, particularly E02/E03/E06.** Those three test whether the model holds
+back rather than guesses — the entire premise invariant #1 rests on. Until
+`evals/evals.json` has actually been run against a Claude instance with the
+skill loaded, "the model never guesses" is an unverified claim, not a
+verified invariant, regardless of how the rule engine itself tests out.
+
+**D16 — English-vs-Indonesian instruction performance stays unmeasured for
+now.** No evidence the current setup (English instructions, replies matched
+to the user's language) is actually a problem — chasing an unmeasured
+premise with no signal it's broken isn't worth the cycles. Revisit only if
+reply quality issues actually surface in Indonesian sessions specifically.
+
+**D17 — Sync cadence stays quarterly.** No data exists yet on actual
+provider release lag either way, so tightening the guess now would just be
+a different guess. Revisit once `-init` has real run history to look at.
+
+**D18 — The sync tool's crude clustering heuristic (splits on first two
+tokens) stays as-is.** `tools/` is authoring-time only, zero runtime risk —
+per this doc's own stated plan, fix after seeing it misfire on real
+provider data, not before.
+
+**D19 — `-init`'s source is a plain public URL — a GCS public object link or
+a GitHub Release asset link, not a database.** Consistent with D11: no auth,
+no cloud SDK, just an HTTPS `GET` against a URL that happens to be hosted on
+GCS-as-public-bucket or as a GitHub Release asset. The specific URL is still
+unpicked (see Open questions), but the *shape* of the source is now settled.
+Note this is deliberately the same mechanism D10 already chose for
+checkpoint *output* (GitHub Releases) — input and output could plausibly
+share infrastructure, though they remain conceptually separate: one is the
+external catalog `-init` reads, the other is `-init`'s own versioned
+snapshot of what it wrote.
+
+**D20 — `-add`'s human-confirmation UX reuses `tools/review_queue.yaml`'s
+existing four-question-per-candidate shape.** That format already solves
+the same problem (present a human with the judgment-call fields a fetch
+can't answer) for the Terraform-schema sync path. Don't invent a second
+review format for a near-identical problem in the same repo — reuse until
+it demonstrably doesn't fit `-add`'s case.
+
 ## Open questions
 
 Genuinely unresolved. Do not present any of these as settled.
 
-- **Rendering is unimplemented.** Only `references/rendering.md` exists, and most
-  of it is explicitly marked as unverified heuristic. Unknown whether draw.io's
-  built-in shape libraries cover all 45 services.
 - **`emit_drawio.py --embed-icons` is broken** (backlog, not investigated).
   Plain output (no icon embedding) works as intended. `--embed-icons` base64s
   SVGs found via `kg.icon_for()` into the output — something in that path
   fails; not yet diagnosed which part (icon resolution, path lookup, or the
   base64/XML embedding itself).
-- **Layer 2 rules are untuned.** Thresholds and severities are reasoned, not
-  measured against real proposals. `REL-002` and `OPS-001` are the likeliest to
-  prove too noisy.
-- **Evals have never been run** against a Claude instance with the skill loaded.
-  The highest-value cases are E02, E03, and E06 — all three test whether the
-  model holds back rather than guessing.
-- **English-vs-Indonesian instruction performance is unmeasured.** An Indonesian
-  version of the skill exists in earlier history if a comparison is wanted.
-- **Provider release lag is unmeasured**, so the right sync cadence is a guess
-  (currently: quarterly).
-- **The clustering heuristic in the sync tool is crude** — splits on the first
-  two tokens. Fine for the sample; likely wrong somewhere on real provider data.
-  Fix after seeing it fail, not before.
-- **`cloud-architecture-validator-init`'s actual source URL is unspecified.**
-  D11 fixed the access method (plain HTTP `GET`, no SDK) — the specific URL,
-  its schema, and update cadence are still not decided, let alone built.
-- **`cloud-architecture-validator-add`'s human-confirmation UX is unspecified.**
-  Likely mirrors `tools/review_queue.yaml`'s per-candidate question format,
-  but that's a guess, not a decision.
+- **`cloud-architecture-validator-init`'s literal source URL is still
+  unpicked.** D19 fixed the shape (a public GCS object link or GitHub
+  Release asset link, plain HTTPS `GET`, no SDK) — which specific URL,
+  serving what schema, is not decided.
 
 ## Style
 

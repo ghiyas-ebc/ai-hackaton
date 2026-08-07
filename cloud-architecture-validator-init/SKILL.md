@@ -25,8 +25,10 @@ else, per this repo's root invariant #3). If the eventual source turns out
 to need auth or isn't reachable over plain HTTPS, that's a reason to
 reconsider the source, not a reason to add an SDK here.
 
-Still open: the actual URL, its schema/format, and update cadence — the
-access *method* is decided, the specific catalog is not.
+Per root CLAUDE.md D19: this is a public GCS object link or a GitHub Release
+asset link, not a database — no auth either way, just a URL. Still open: the
+actual URL, its schema/format, and update cadence — the *shape* of the
+source is decided, the specific catalog is not.
 
 ## Hard constraints carried over from create-architect
 
