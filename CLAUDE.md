@@ -158,6 +158,11 @@ Genuinely unresolved. Do not present any of these as settled.
 - **Rendering is unimplemented.** Only `references/rendering.md` exists, and most
   of it is explicitly marked as unverified heuristic. Unknown whether draw.io's
   built-in shape libraries cover all 45 services.
+- **`emit_drawio.py --embed-icons` is broken** (backlog, not investigated).
+  Plain output (no icon embedding) works as intended. `--embed-icons` base64s
+  SVGs found via `kg.icon_for()` into the output — something in that path
+  fails; not yet diagnosed which part (icon resolution, path lookup, or the
+  base64/XML embedding itself).
 - **Layer 2 rules are untuned.** Thresholds and severities are reasoned, not
   measured against real proposals. `REL-002` and `OPS-001` are the likeliest to
   prove too noisy.
