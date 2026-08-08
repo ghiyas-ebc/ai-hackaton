@@ -59,6 +59,20 @@ one-record-at-a-time:
   *checkpoint* taken after a passing `check_kg.py` run, not a second copy of
   the data living somewhere else.
 
+## Provenance is the mechanical half of the D6 gate
+
+Root CLAUDE.md D21: every entry carries a `provenance` block, and
+`check_kg.py` fails on any entry with `status: unverified`. This skill writes
+`generated: cloud-architecture-validator-init`, `status: unverified`, and
+`sources:` pointing at the catalog URL the batch came from.
+
+This matters more here than in `-add` because the failure is plural. A bulk
+sync that lands 30 entries lands 30 `unverified` rows, and the KG stays
+failing until a human has been through all 30 — which is the correct
+behaviour, and the reason the constraint above ("never auto-write") now has
+teeth beyond good intentions. A sync is not "done" when the fetch succeeds;
+it is done when the review is.
+
 ## Versioning
 
 See root CLAUDE.md decision D10 — checkpoint shape and trigger are decided

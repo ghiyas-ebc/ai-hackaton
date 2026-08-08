@@ -1,7 +1,7 @@
 """
 Knowledge graph integrity checker + regression against the original draft.
 
-Run this after every KG change. It guards three things:
+Run this after every KG change. It guards four things:
 
 1. Internal consistency — dangling references, roles required by rules that no
    node provides, rules that can never fire.
@@ -14,10 +14,15 @@ Run this after every KG change. It guards three things:
    rule may still decide correctly. Reachability brute-forces every directed
    node pair and attributes the verdict to the rule that produced it; a rule
    that never wins any pair is dead.
+4. Provenance — every node must declare who wrote it, and any node an agent
+   proposed must carry a human sign-off. This does not verify semantic truth
+   (see D6 — nothing here can); it verifies that somebody claims to have
+   checked, which is the part a script can actually enforce.
 
     python3 check_kg.py
 """
 
+import datetime
 import json
 import os
 from collections import defaultdict
@@ -81,6 +86,76 @@ def check_integrity(kg):
                 problems.append(f"Node '{s['id']}' is missing property '{field}'.")
 
     return problems
+
+
+VALID_PROVENANCE_STATUS = {"manual", "unverified", "verified"}
+
+
+def check_provenance(kg, today=None):
+    """Refuse a KG containing entries no human has vouched for.
+
+    D6 says a wrong `reachability` fails silently across ~20 pairs and this
+    script cannot catch it, because it checks structural consistency rather
+    than semantic truth. That remains true. What this check *can* see is the
+    weaker but still useful thing: whether anybody claims to have looked.
+    An agent-written entry lands as `unverified` and fails here until a human
+    flips it, which turns D6 from a discipline into a gate.
+
+    Returns (problems, warnings). Warnings do not fail the run — a stale date
+    means "re-check this", not "this is wrong".
+    """
+    problems, warnings = [], []
+    today = today or datetime.date.today()
+
+    for s in kg.services.values():
+        prov = s.get("provenance")
+        if not prov:
+            problems.append(
+                f"Node '{s['id']}' has no `provenance`. Every entry must say who "
+                "wrote it and whether the judgment fields were human-confirmed."
+            )
+            continue
+        status = prov.get("status")
+        if status not in VALID_PROVENANCE_STATUS:
+            problems.append(
+                f"Node '{s['id']}' has provenance.status '{status}'; expected one "
+                f"of {sorted(VALID_PROVENANCE_STATUS)}."
+            )
+            continue
+        if status == "unverified":
+            problems.append(
+                f"Node '{s['id']}' is provenance.status 'unverified' — proposed by "
+                f"'{prov.get('generated', 'unknown')}' and not yet human-confirmed. "
+                "Confirm network_placement, reachability and roles, then set "
+                "status: verified with a verified: date."
+            )
+            continue
+        if status == "verified" and not prov.get("verified"):
+            problems.append(
+                f"Node '{s['id']}' claims status 'verified' but carries no "
+                "`verified:` date. Say when, or it is not a sign-off."
+            )
+        for field in ("verified", "stale_after"):
+            raw = prov.get(field)
+            if raw is None:
+                continue
+            date = raw if isinstance(raw, datetime.date) else None
+            if date is None:
+                try:
+                    date = datetime.date.fromisoformat(str(raw))
+                except ValueError:
+                    problems.append(
+                        f"Node '{s['id']}' provenance.{field} is '{raw}'; expected "
+                        "YYYY-MM-DD."
+                    )
+                    continue
+            if field == "stale_after" and date < today:
+                warnings.append(
+                    f"Node '{s['id']}' went stale on {date} — re-check its "
+                    "judgment fields against the provider's current docs."
+                )
+
+    return problems, warnings
 
 
 def check_icons(kg):
@@ -255,6 +330,16 @@ def main():
     else:
         print("  clean")
 
+    print("\n== Provenance ==")
+    prov_problems, prov_warnings = check_provenance(kg)
+    if prov_problems:
+        for p in prov_problems:
+            print("  [!]", p)
+    else:
+        print("  clean — every node is human-authored or human-confirmed")
+    for w in prov_warnings:
+        print("  [~]", w)
+
     print("\n== Rule reachability ==")
     hits, unreachable = check_rule_reachability(kg)
     for rule in kg.conn_rules:
@@ -307,7 +392,10 @@ def main():
     print(f"  directed GCP pairs: {pairs}, decided: {covered} ({covered/pairs:.0%})")
     print("  (original draft: 20/462 = 4%)")
 
-    return 1 if (problems or failed or unreachable or icon_problems or icon_failed) else 0
+    return 1 if (
+        problems or prov_problems or failed or unreachable
+        or icon_problems or icon_failed
+    ) else 0
 
 
 if __name__ == "__main__":

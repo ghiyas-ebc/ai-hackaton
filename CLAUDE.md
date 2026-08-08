@@ -246,6 +246,36 @@ can't answer) for the Terraform-schema sync path. Don't invent a second
 review format for a near-identical problem in the same repo — reuse until
 it demonstrably doesn't fit `-add`'s case.
 
+**D21 — Every `services.yaml` entry carries a `provenance` block, and
+`check_kg.py` fails on any entry an agent proposed that no human has signed
+off.** Adopted from OKF v0.2's trust/provenance fields (`sources`,
+`generated`, `verified`, `status`, `stale_after`) — the one part of the
+Graphify/OKF pattern worth taking. The rest of that pattern was rejected:
+Graphify extracts a graph *from* unstructured code via Tree-sitter plus LLM
+semantic extraction, which is a problem this repo does not have (the KG is
+45 hand-curated nodes), and its store-nodes-and-edges model is a straight
+D2 reversal — our edges are derived from node properties at query time, not
+persisted. NetworkX would also breach invariant #3. OKF as the KG's own
+on-disk format stays rejected for the reason already given: one-concept-per-
+file markdown loses the YAML comments this doc's Style section calls the
+primary carrier of the model's reasoning, and it shatters the six
+interacting files D10 requires to snapshot together.
+
+What provenance buys that nothing else does: D6 correctly says `check_kg.py`
+cannot catch a wrong `reachability` because it checks structural
+consistency, not semantic truth. That stays true. But it *can* catch
+"nobody claims to have looked," which converts D6 from a discipline into a
+gate — `-init` and `-add` write `status: unverified`, the check fails, a
+human flips it to `verified` with a date. `status` is three-valued, not
+boolean: `manual` (hand-written, no agent involved, judgment fields human by
+construction), `unverified` (agent-proposed, fails the check), `verified`
+(agent-proposed and human-confirmed, requires a `verified:` date). All 45
+existing entries backfilled as `manual` rather than `verified` with an
+invented date — they *are* hand-authored, but nobody re-reviewed them on
+2026-08-08 and the field should not say otherwise. `stale_after` warns
+rather than fails, and is what gives D17's quarterly cadence something
+concrete to act on.
+
 ## Open questions
 
 Genuinely unresolved. Do not present any of these as settled.

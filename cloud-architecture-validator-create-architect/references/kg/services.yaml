@@ -24,6 +24,27 @@
 # roles — functional capabilities; used by rules and by cross-provider translation.
 #   The same role can be held by services from different providers — that is what
 #   lets intermediaries translate correctly along with everything else.
+#
+# provenance — who put this entry here and whether a human vouched for the three
+#   properties above that a lookup cannot answer (network_placement, reachability,
+#   roles). This does NOT drive validation; it drives check_kg.py's refusal to
+#   pass a KG containing entries nobody has signed off on. See D21.
+#
+#   generated — manual | cloud-architecture-validator-add | cloud-architecture-validator-init
+#   status    — manual     : a person hand-wrote the entry; no agent was involved,
+#                            so the judgment fields are human by construction
+#               unverified : an agent proposed it, no human has confirmed the
+#                            judgment fields yet. check_kg.py FAILS on this.
+#               verified   : an agent proposed it and a human confirmed it;
+#                            requires a `verified:` date saying when
+#   sources   — optional list of URLs the agent-verifiable fields came from
+#   verified  — YYYY-MM-DD, required when status is `verified`
+#   stale_after — optional YYYY-MM-DD; past that date check_kg.py warns (not fails)
+#
+#   Every entry below is `status: manual` because all 45 predate -add/-init and
+#   were hand-written. That is a statement about their origin, not a claim that
+#   anyone re-reviewed them on a particular date — which is exactly why `manual`
+#   is a separate status from `verified` rather than a backfilled date.
 
 services:
 
@@ -37,6 +58,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-functions
     name: Cloud Functions
@@ -47,6 +69,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: gke-autopilot
     name: GKE Autopilot
@@ -57,6 +80,7 @@ services:
     network_placement: in_vpc
     reachability: private_ip
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: compute-engine
     name: Compute Engine
@@ -67,6 +91,7 @@ services:
     network_placement: in_vpc
     reachability: private_ip
     region_scope: zonal
+    provenance: {generated: manual, status: manual}
 
   - id: app-engine
     name: App Engine
@@ -77,6 +102,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-sql
     name: Cloud SQL
@@ -88,6 +114,7 @@ services:
     reachability: public_or_private
     region_scope: regional
     engines: [mysql, postgresql, sqlserver]
+    provenance: {generated: manual, status: manual}
 
   - id: spanner
     name: Cloud Spanner
@@ -98,6 +125,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: multi_region
+    provenance: {generated: manual, status: manual}
 
   - id: firestore
     name: Firestore
@@ -108,6 +136,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: multi_region
+    provenance: {generated: manual, status: manual}
 
   - id: bigtable
     name: Cloud Bigtable
@@ -118,6 +147,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: memorystore
     name: Memorystore
@@ -128,6 +158,7 @@ services:
     network_placement: managed_service
     reachability: private_ip
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-storage
     name: Cloud Storage
@@ -138,6 +169,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: multi_region
+    provenance: {generated: manual, status: manual}
 
   - id: vpc
     name: VPC Network
@@ -148,6 +180,7 @@ services:
     network_placement: network_fabric
     reachability: private_ip
     region_scope: global
+    provenance: {generated: manual, status: manual}
 
   - id: serverless-vpc-access
     name: Serverless VPC Access
@@ -158,6 +191,7 @@ services:
     network_placement: connector
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-sql-auth-proxy
     name: Cloud SQL Auth Proxy
@@ -168,6 +202,7 @@ services:
     network_placement: connector
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: private-service-connect
     name: Private Service Connect
@@ -178,6 +213,7 @@ services:
     network_placement: connector
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-load-balancing
     name: Cloud Load Balancing
@@ -188,6 +224,7 @@ services:
     network_placement: edge
     reachability: public_or_private
     region_scope: global
+    provenance: {generated: manual, status: manual}
 
   - id: cloud-armor
     name: Cloud Armor
@@ -199,6 +236,7 @@ services:
     reachability: n_a
     attaches_to_roles: [load_balancer_l7, edge_entry]
     region_scope: global
+    provenance: {generated: manual, status: manual}
 
   - id: pubsub
     name: Pub/Sub
@@ -209,6 +247,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: global
+    provenance: {generated: manual, status: manual}
 
   - id: dataflow
     name: Dataflow
@@ -219,6 +258,7 @@ services:
     network_placement: in_vpc
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: bigquery
     name: BigQuery
@@ -229,6 +269,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: multi_region
+    provenance: {generated: manual, status: manual}
 
   - id: vertex-ai
     name: Vertex AI
@@ -239,6 +280,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: secret-manager
     name: Secret Manager
@@ -249,6 +291,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: global
+    provenance: {generated: manual, status: manual}
 
   # -------------------------------------------------------------- Azure ----
   - id: azure-container-apps
@@ -260,6 +303,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-functions
     name: Azure Functions
@@ -270,6 +314,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: aks
     name: Azure Kubernetes Service
@@ -280,6 +325,7 @@ services:
     network_placement: in_vpc
     reachability: private_ip
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-vm
     name: Azure Virtual Machines
@@ -290,6 +336,7 @@ services:
     network_placement: in_vpc
     reachability: private_ip
     region_scope: zonal
+    provenance: {generated: manual, status: manual}
 
   - id: azure-app-service
     name: Azure App Service
@@ -300,6 +347,7 @@ services:
     network_placement: serverless_offvpc
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-sql-database
     name: Azure SQL Database
@@ -311,6 +359,7 @@ services:
     reachability: public_or_private
     region_scope: regional
     engines: [sqlserver]
+    provenance: {generated: manual, status: manual}
 
   - id: azure-sql-hyperscale
     name: Azure SQL Hyperscale
@@ -321,6 +370,7 @@ services:
     network_placement: managed_service
     reachability: public_or_private
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-cosmos-db
     name: Azure Cosmos DB
@@ -332,6 +382,7 @@ services:
     reachability: api_endpoint
     region_scope: multi_region
     apis: [core_sql, cassandra, mongodb, gremlin, table]
+    provenance: {generated: manual, status: manual}
 
   - id: azure-cache-redis
     name: Azure Cache for Redis
@@ -342,6 +393,7 @@ services:
     network_placement: managed_service
     reachability: private_ip
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-blob-storage
     name: Azure Blob Storage
@@ -352,6 +404,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-vnet
     name: Azure Virtual Network
@@ -362,6 +415,7 @@ services:
     network_placement: network_fabric
     reachability: private_ip
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-vnet-integration
     name: Azure VNet Integration
@@ -372,6 +426,7 @@ services:
     network_placement: connector
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-private-link
     name: Azure Private Link
@@ -382,6 +437,7 @@ services:
     network_placement: connector
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-load-balancer
     name: Azure Load Balancer
@@ -392,6 +448,7 @@ services:
     network_placement: edge
     reachability: public_or_private
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-app-gateway
     name: Azure Application Gateway
@@ -406,6 +463,7 @@ services:
     # `features` below — the original draft modelled it as a standalone service,
     # which produced a dangling WAF box in the diagram.
     features: [waf]
+    provenance: {generated: manual, status: manual}
 
   - id: azure-front-door
     name: Azure Front Door
@@ -417,6 +475,7 @@ services:
     reachability: public_or_private
     region_scope: global
     features: [waf]
+    provenance: {generated: manual, status: manual}
 
   - id: azure-service-bus
     name: Azure Service Bus
@@ -427,6 +486,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-event-grid
     name: Azure Event Grid
@@ -437,6 +497,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-data-factory
     name: Azure Data Factory
@@ -447,6 +508,7 @@ services:
     network_placement: managed_service
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-stream-analytics
     name: Azure Stream Analytics
@@ -457,6 +519,7 @@ services:
     network_placement: managed_service
     reachability: n_a
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-synapse
     name: Azure Synapse Analytics
@@ -467,6 +530,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-ml
     name: Azure Machine Learning
@@ -477,6 +541,7 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}
 
   - id: azure-key-vault
     name: Azure Key Vault
@@ -487,3 +552,4 @@ services:
     network_placement: managed_service
     reachability: api_endpoint
     region_scope: regional
+    provenance: {generated: manual, status: manual}

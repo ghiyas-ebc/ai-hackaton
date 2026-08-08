@@ -172,6 +172,13 @@ CLAUDE.md: a wrong `reachability` value fails silently across ~20 pairs, and
 bulk (re)population from an external catalog, that's
 `cloud-architecture-validator-init`.
 
+Every entry also carries a `provenance` block recording who wrote it and
+whether a human confirmed the three properties a lookup cannot answer
+(`network_placement`, `reachability`, `roles`). A hand-written entry is
+`status: manual`; an agent-proposed one starts `unverified` and `check_kg.py`
+fails until a human confirms it. Header comments in `services.yaml` give the
+full field list.
+
 After every change:
 
 ```bash

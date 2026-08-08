@@ -60,6 +60,19 @@ copy of the data anywhere. This skill must not grow a second way to mutate
 write path, whether the edit came from a person or from this skill's
 agent-assisted flow.
 
+## Provenance is not optional
+
+Every entry this skill writes carries a `provenance` block (root CLAUDE.md
+D21). This skill writes `generated: cloud-architecture-validator-add` and
+`status: unverified`, plus `sources:` listing the URLs the agent checked the
+safe fields against. **`check_kg.py` fails while status is `unverified`** —
+that is the point, not a bug to route around. Only the human review step
+flips it to `status: verified` with a `verified:` date.
+
+This skill must never write `status: verified` itself, and never write
+`status: manual` — `manual` means a person hand-wrote the entry with no agent
+in the loop, which is by definition not what happened here.
+
 ## Before implementing this for real
 
 1. Decide the exact human-confirmation UX — a single question batch per
