@@ -1,27 +1,28 @@
 <!--
 Sync Impact Report
-Version change: [TEMPLATE] → 1.0.0 (initial ratification)
-Modified principles: n/a (first fill of template)
+Version change: 1.0.0 → 1.1.0
+Modified principles:
+  - I. Verdict-Not-Guess — added the three-tier evidence-gating classification
+    (Proven / Theoretically Possible / Requires Deep Review) as the concrete mechanism the
+    principle already implied.
+  - IV. Read-Only by Default, Explicit Write Path — named the Gap Report as the specific
+    artifact this write path produces for unfulfilled/uncovered requests.
 Added sections:
-  - Core Principles I–V (Verdict-Not-Guess, Evidence-Grounded History, Human Gate on Judgment Calls,
-    Read-Only by Default / Explicit Write Path, Layered Transparency)
-  - Product Scope & Constraints
-  - Development Workflow & Quality Gates
-  - Governance
-Removed sections: none (template placeholders only)
+  - "Non-Blocking Operation" bullet under Product Scope & Constraints (proceed on stated
+    assumptions rather than stall the meeting waiting on missing input)
+  - "Mismatch correction" clarified under Principle I rationale
+Removed sections: none
 Templates requiring updates:
-  - .specify/templates/plan-template.md ⚠ pending (verify Constitution Check section references these
-    five principles by name)
-  - .specify/templates/spec-template.md ⚠ pending (verify mandatory-section list doesn't conflict with
-    Principle I / III)
-  - .specify/templates/tasks-template.md ⚠ pending (verify task categories cover evidence-sourcing and
-    human-gate review tasks)
-  - .specify/templates/commands/*.md ⚠ pending (check for stale agent-specific references)
-  - CLAUDE.md ✅ no change needed — its invariants/decision log already encode the same principles for
-    the cloud-architecture-validator subsystem; this constitution generalizes them to the whole product
+  - .specify/templates/plan-template.md ⚠ pending (still generic/dynamic — no edit required,
+    re-checked this pass)
+  - .specify/templates/spec-template.md ⚠ pending (no conflict found, re-checked this pass)
+  - .specify/templates/tasks-template.md ⚠ pending (no conflict found, re-checked this pass)
+  - CLAUDE.md ✅ no change needed
 Follow-up TODOs:
-  - TODO(RATIFICATION_DATE): actual founding date of this constitution's principles is unknown; using
-    today's date as both ratification and last-amended since this is the first adoption.
+  - TODO(RATIFICATION_DATE): unchanged from v1.0.0 — original ratification date used as-is.
+  - Source doc (Technical_Sales_Precision.pdf) names concrete internal metrics (18
+    escalations/month, 6-day avg delay) as the business case; these are product-marketing
+    claims, not constitutional obligations, and are deliberately not encoded as principles.
 -->
 
 # Technical Co-Pilot Constitution
@@ -36,10 +37,19 @@ verdict for a human reader, but it MUST NOT be the thing that decides difficulty
 no rule or historical evidence covers a request, the system MUST say so explicitly (e.g.
 `NEEDS_ENGINEERING_REVIEW`, `NO_PRECEDENT`) rather than produce a plausible-sounding number.
 
+Capability claims feeding a verdict MUST be classified into exactly one of three tiers, never blended
+into a single confidence number: **Proven** (built and shipped before, cite the project), **Theoretically
+Possible** (no internal precedent, but nothing in the KG/rules rules it out), or **Requires Deep Review**
+(conflicts with a rule, or the request itself is ambiguous/unmatched). A verdict MUST also surface tech
+mismatches — cases where the client's stated ask (e.g. "we need WebSockets") doesn't match what the
+underlying requirement actually needs (e.g. a REST API) — as a correction, not a silent substitution.
+
 Rationale: the entire value proposition is replacing a salesperson's gut feeling with a data-backed
 assessment. An LLM-guessed verdict wearing the same "Verdict Card" UI as a rule-derived one is
 indistinguishable to the user and destroys the tool's core trust claim the first time it's confidently
-wrong in front of a client.
+wrong in front of a client. The three-tier split exists because "Medium difficulty" alone can't tell a
+rep whether that's because it's genuinely hard or because nobody has tried it — those require different
+conversations with the client.
 
 ### II. Evidence-Grounded History
 Every fact used to produce a verdict (past project outcome, technical mismatch, effort estimate) MUST
@@ -68,6 +78,12 @@ Capturing "market intelligence" back into the organizational knowledge base is a
 write, never an automatic side effect of running a validation. Any component that turns a sales
 conversation into a persisted knowledge asset MUST go through an explicit confirmation step and MUST
 record provenance (who/what proposed it, when, verified status).
+
+An unfulfilled or `UNCOVERED` request is not a dead end: it MUST be logged as a **Gap Report** entry —
+a Product-facing, not sales-facing, artifact — describing what the client asked for and why current
+rules/history don't cover it. This is the one write path that fires without a per-instance human
+confirmation, because a Gap Report is a record of "we didn't know," not a claim of new organizational
+fact, and Principle III's judgment-field protections don't apply to it.
 
 Rationale: same asymmetry the KG invariants already rely on — a missing data point fails safely (visible
 gap, prompts a human), a bad data point silently entering shared organizational knowledge does not, and
@@ -98,6 +114,10 @@ This system is a pre-validation copilot used live or near-live in sales conversa
   low-confidence or escalated, never presented with the same confidence as a fully-supported one.
 - No client data or sales-conversation content leaves the organization's own systems for verdict
   computation; historical-evidence lookups and any LLM calls operate on internally-controlled data only.
+- The system MUST remain non-blocking: if the sales rep can't supply a detail mid-meeting, the system
+  proceeds using an explicitly stated assumption (labeled as such on the Verdict Card) rather than
+  halting to demand missing input. A stalled tool in a live meeting is a worse failure than a verdict
+  that's transparently caveated.
 
 ## Development Workflow & Quality Gates
 
@@ -129,4 +149,4 @@ step that names which of the five principles are implicated and how the design s
 that cannot satisfy Principle I (Verdict-Not-Guess) or III (Human Gate) MUST be revised before
 implementation proceeds, not shipped with a caveat.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-09 | **Last Amended**: 2026-08-09
+**Version**: 1.1.0 | **Ratified**: 2026-08-09 | **Last Amended**: 2026-08-09
