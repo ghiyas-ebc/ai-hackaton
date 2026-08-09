@@ -358,6 +358,7 @@ most of the reasoning behind the model; keep them when editing, and prefer
 YAML over JSON for that reason.
 
 <!-- SPECKIT START -->
+Active plan: specs/001-verdict-card/plan.md
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
 <!-- SPECKIT END -->
