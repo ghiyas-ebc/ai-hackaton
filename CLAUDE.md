@@ -356,3 +356,8 @@ Genuinely unresolved. Do not present any of these as settled.
 Explain why a constraint exists rather than asserting it. The KG comments carry
 most of the reasoning behind the model; keep them when editing, and prefer
 YAML over JSON for that reason.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
