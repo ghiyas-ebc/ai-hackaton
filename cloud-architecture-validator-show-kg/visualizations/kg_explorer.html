@@ -35,6 +35,21 @@
   #zoombox { pointer-events:auto; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; }
   #zoombox button { border:none; background:none; width:32px; height:32px; cursor:pointer; font-size:16px; color:var(--text); }
   #zoombox button:hover { background:#f2f4f7; }
+  #retrieval-box input[type=text] { margin-bottom:8px; }
+  .row { display:flex; gap:6px; align-items:center; }
+  .row button { flex:1; padding:6px 8px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .row button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .row button:hover { filter:brightness(.96); }
+  .knob { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); margin:6px 0; }
+  .knob input[type=range] { flex:1; }
+  .knob output { color:var(--text); font-variant-numeric:tabular-nums; width:14px; text-align:right; }
+  #hits { margin-top:8px; }
+  .hit { display:flex; justify-content:space-between; gap:6px; font-size:12px; padding:4px 6px; border-radius:5px; cursor:pointer; }
+  .hit:hover { background:#f2f4f7; }
+  .hit .why { color:var(--muted); font-size:10px; }
+  .hit .score { font-variant-numeric:tabular-nums; color:var(--accent); font-weight:600; }
+  .hop-tag { display:inline-block; width:16px; color:var(--muted); font-size:10px; }
+  #trace { margin-top:10px; font-family:ui-monospace,Menlo,monospace; font-size:10.5px; line-height:1.5; color:#4b5563; background:#f7f8fa; border-radius:6px; padding:8px; white-space:pre-wrap; max-height:190px; overflow-y:auto; }
   ::-webkit-scrollbar { width:8px; }
   ::-webkit-scrollbar-thumb { background:#d5d9e0; border-radius:4px; }
 </style>
@@ -45,7 +60,22 @@
     <h1>KG Explorer</h1>
     <div class="sub">services.yaml + connectivity-rules.yaml, live-derived</div>
 
-    <input type="text" id="search" placeholder="Search nodes...">
+    <input type="text" id="search" placeholder="Filter nodes by name...">
+
+    <fieldset id="retrieval-box">
+      <legend>Context lens</legend>
+      <input type="text" id="agent-query" placeholder="highlight what a question touches">
+      <div class="knob">focus<input type="range" id="seed-k" min="1" max="10" value="3"><output id="seed-k-out">3</output></div>
+      <div class="knob">hops<input type="range" id="hop-n" min="0" max="3" value="1"><output id="hop-n-out">1</output></div>
+      <div class="knob">fanout<input type="range" id="fanout" min="1" max="15" value="4"><output id="fanout-out">4</output></div>
+      <div class="row">
+        <button id="run-retrieval" class="primary">Focus</button>
+        <button id="clear-retrieval">Clear</button>
+      </div>
+      <div class="why" style="padding:2px 2px 6px">Visualization only. Dims the graph down to what these words touch — nothing here feeds the validator.</div>
+      <div id="hits"></div>
+      <div id="trace" hidden></div>
+    </fieldset>
 
     <fieldset>
       <legend>Provider</legend>
@@ -109,6 +139,115 @@ let nodeLabelElsById = new Map();
 let edgeLabelElsById = new Map();
 
 const VERDICT_LABEL = { ALLOWED: 'allowed', ALLOWED_WITH_NOTE: 'note', NEEDS_COMPONENT: 'needs component' };
+
+// --- Context lens ---------------------------------------------------------
+// This is a VIEWING LENS, not a retrieval step. It answers "if someone asked
+// about X, which part of this graph is that?" by dimming everything else.
+//
+// It is deliberately a dumb substring match. An earlier version here was a
+// weighted lexical scorer with a 50-entry synonym map and a query-coverage
+// term — machinery built to approximate semantic search. That was the wrong
+// problem: the whole KG is ~12k tokens and fits in a model's context, so a
+// model reading it directly already knows Cloud SQL is a database. Nothing
+// downstream reads this panel, and nothing may: feeding validate.py a subset
+// of the KG would change verdicts silently, which breaks root invariant #1 by
+// omission. See D22.
+let retrieval = null;   // { hopById: Map<id,int>, seeds: [id], edgeIds: Set }
+
+const MATCH_FIELDS = ['name', 'id', 'category', 'tier', 'network_placement',
+                      'reachability', 'region_scope', 'roles'];
+
+function matchNode(n, tokens) {
+  const hay = MATCH_FIELDS
+    .map(f => (Array.isArray(n[f]) ? n[f].join(' ') : n[f]) || '')
+    .join(' ').toLowerCase().replace(/[_-]/g, ' ');
+  const hits = tokens.filter(t => hay.includes(t));
+  return { hits: hits.length, where: hits };
+}
+
+function runRetrieval() {
+  const q = document.getElementById('agent-query').value.trim().toLowerCase();
+  const k = +document.getElementById('seed-k').value;
+  const hops = +document.getElementById('hop-n').value;
+  if (!q) { clearRetrieval(); return; }
+
+  const tokens = q.split(/[^a-z0-9]+/).filter(t => t.length > 1);
+  // Most tokens matched wins, ties broken by name. No weighting, no ranking
+  // score — a number here would imply a confidence the match does not have.
+  const matched = [...nodesById.values()]
+    .map(n => ({ node: n, ...matchNode(n, tokens) }))
+    .filter(r => r.hits > 0)
+    .sort((a, b) => b.hits - a.hits || a.node.name.localeCompare(b.node.name));
+
+  const seeds = matched.slice(0, k).map(r => r.node.id);
+  const trace = [
+    `terms    : ${JSON.stringify(tokens)}`,
+    `matched  : ${matched.length}/${nodesById.size} nodes`,
+    `focus    : ${seeds.length ? seeds.join(', ') : '(none)'}`,
+  ];
+
+  // BFS over the *undirected* graph — an agent reading context cares that two
+  // services are related, not which way the arrow points.
+  //
+  // This KG averages ~31 edges per node (691 over 45): almost complete. An
+  // uncapped single hop returns the entire graph, which tells you nothing
+  // about what a question actually pulls in. So each hop keeps only the top
+  // FANOUT neighbours, ranked by how many frontier nodes they touch. Whatever
+  // gets cut is reported, never silently dropped.
+  const fanout = +document.getElementById('fanout').value;
+  const hopById = new Map(seeds.map(id => [id, 0]));
+  let frontier = seeds;
+  for (let h = 1; h <= hops && frontier.length; h++) {
+    const frontierSet = new Set(frontier);
+    const touches = new Map();
+    for (const e of edgesRaw) {
+      for (const [a, b] of [[e.source, e.target], [e.target, e.source]]) {
+        if (frontierSet.has(a) && !hopById.has(b)) touches.set(b, (touches.get(b) || 0) + 1);
+      }
+    }
+    const cands = [...touches.entries()]
+      .map(([id, t]) => ({ id, rank: t }))
+      .sort((a, b) => b.rank - a.rank);
+    const next = cands.slice(0, fanout).map(c => c.id);
+    next.forEach(id => hopById.set(id, h));
+    const dropped = cands.length - next.length;
+    trace.push(`hop ${h}    : +${next.length} of ${cands.length} candidates` +
+      (dropped ? ` (${dropped} cut by fanout=${fanout})` : '') + ` — total ${hopById.size}`);
+    frontier = next;
+  }
+
+  const edgeIds = new Set();
+  edgesRaw.forEach((e, i) => {
+    if (hopById.has(e.source) && hopById.has(e.target)) edgeIds.add('e' + i);
+  });
+  trace.push(`context  : ${hopById.size} nodes, ${edgeIds.size} relationships`);
+
+  retrieval = { hopById, seeds, edgeIds };
+  renderHits(matched.slice(0, k), tokens, trace);
+  applyFilters();
+  if (hopById.size) setTimeout(() => nvl.fit([...presentNodeIds]), 250);
+}
+
+function renderHits(top, tokens, trace) {
+  const hits = document.getElementById('hits');
+  hits.innerHTML = top.length
+    ? top.map(r => `<div class="hit" data-id="${r.node.id}">
+         <span>${r.node.name}<div class="why">matched: ${r.where.join(', ')}</div></span>
+         <span class="score">${r.hits}/${tokens.length}</span></div>`).join('')
+    : '<div class="why" style="padding:4px 6px">Nothing in the KG matches those words. Confirm the service name \u2014 do not assume it exists.</div>';
+  hits.querySelectorAll('.hit').forEach(el =>
+    el.addEventListener('click', () => showNodeDetail(el.dataset.id)));
+  const t = document.getElementById('trace');
+  t.hidden = false;
+  t.textContent = trace.join('\n');
+}
+
+function clearRetrieval() {
+  retrieval = null;
+  document.getElementById('hits').innerHTML = '';
+  document.getElementById('trace').hidden = true;
+  applyFilters();
+}
 
 // NVL's own canvas-based `caption` field turned out to be unreliable in this
 // build — text drawing silently no-ops after certain nvl.fit()/zoom sequences
@@ -223,6 +362,23 @@ function init(data) {
     el.addEventListener('change', applyFilters));
   document.getElementById('search').addEventListener('input', applyFilters);
 
+  document.getElementById('run-retrieval').addEventListener('click', runRetrieval);
+  document.getElementById('clear-retrieval').addEventListener('click', () => {
+    document.getElementById('agent-query').value = '';
+    clearRetrieval();
+  });
+  document.getElementById('agent-query').addEventListener('keydown', evt => {
+    if (evt.key === 'Enter') runRetrieval();
+  });
+  ['seed-k', 'hop-n', 'fanout'].forEach(id => {
+    const el = document.getElementById(id);
+    const out = document.getElementById(id + '-out');
+    el.addEventListener('input', () => {
+      out.value = el.value;
+      if (retrieval) runRetrieval();   // live re-run so the knobs feel like tuning a retriever
+    });
+  });
+
   document.getElementById('toggle-node-labels').addEventListener('change', evt => {
     showNodeLabels = evt.target.checked;
     nodeLabelElsById.forEach(el => { el.style.display = showNodeLabels ? '' : 'none'; });
@@ -272,6 +428,12 @@ function applyFilters() {
     if (match) wantNodeIds.add(n.id);
   }
 
+  // Retrieval narrows on top of the facets, never around them: what the
+  // agent "sees" is the retrieved subgraph intersected with what's visible.
+  if (retrieval) {
+    for (const id of [...wantNodeIds]) if (!retrieval.hopById.has(id)) wantNodeIds.delete(id);
+  }
+
   const wantEdgeIds = new Set();
   edgesRaw.forEach((e, i) => {
     if (wantNodeIds.has(e.source) && wantNodeIds.has(e.target) && verdicts.has(e.verdict)) {
@@ -290,12 +452,43 @@ function applyFilters() {
 
   presentNodeIds = wantNodeIds;
   presentEdgeIds = wantEdgeIds;
+  applyHopStyling();
 
   if (selectedNodeId && !presentNodeIds.has(selectedNodeId)) selectedNodeId = null;
   if (selectedEdgeId && !presentEdgeIds.has(selectedEdgeId)) selectedEdgeId = null;
 
-  document.getElementById('stats').textContent =
-    `${wantNodeIds.size} / ${nodesById.size} nodes shown`;
+  document.getElementById('stats').textContent = retrieval
+    ? `${wantNodeIds.size} / ${nodesById.size} nodes in focus · ${wantEdgeIds.size} relationships`
+    : `${wantNodeIds.size} / ${nodesById.size} nodes shown`;
+}
+
+// Fades a hex colour toward the canvas background so hop distance reads as
+// "further from what was asked" without needing a legend.
+function fade(hex, amount) {
+  const bg = [12, 14, 18];
+  const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return '#' + c.map((v, i) =>
+    Math.round(v + (bg[i] - v) * amount).toString(16).padStart(2, '0')).join('');
+}
+
+function applyHopStyling() {
+  const updates = [];
+  for (const id of presentNodeIds) {
+    const base = nvlNodeById.get(id);
+    const hop = retrieval ? retrieval.hopById.get(id) : 0;
+    const fadeBy = retrieval ? Math.min(0.62, hop * 0.32) : 0;
+    updates.push({
+      id,
+      color: fade(base.color, fadeBy),
+      size: retrieval ? Math.max(18, 40 - hop * 9) : 36,
+    });
+    const label = nodeLabelElsById.get(id);
+    if (label) {
+      label.style.opacity = retrieval ? Math.max(0.42, 1 - hop * 0.28) : 1;
+      label.style.fontWeight = retrieval && hop === 0 ? '700' : '400';
+    }
+  }
+  if (updates.length) nvl.addAndUpdateElementsInGraph(updates, []);
 }
 
 function showNodeDetail(id) {

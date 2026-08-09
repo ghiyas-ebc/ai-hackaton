@@ -58,17 +58,41 @@ python3 scripts/validate.py \
   --environment production --residency id --sla critical
 ```
 
-`--environment`, `--residency`, and `--sla` switch on the relevant layer-2 rules.
-Ask the user for these when the material is for a real client; defaults are fine
-for an internal PoC.
+`--environment`, `--residency`, and `--sla` switch on the relevant rules in the
+upper layers. Ask the user for these when the material is for a real client;
+defaults are fine for an internal PoC.
 
-The JSON output has two sections and both matter:
+The JSON output has three sections and all matter:
 
-- `connectivity` — a verdict per connection
-- `architecture` — architecture-level findings (security, reliability, cost,
-  data residency). **This is the section with the most value for the user.**
-  Connectivity problems surface on their own during development; layer-2
-  findings are what sink a proposal in the meeting room.
+- `layers` — the L1–L8 ladder, one entry per layer, walked in order. Read this
+  first: it tells you what was checked, what was clean, and what was
+  `UNCOVERED`.
+- `connectivity` — a verdict per connection (L1)
+- `architecture` — findings from L2–L8, each tagged with its `layer`.
+  **This is the section with the most value for the user.** Connectivity
+  problems surface on their own during development; the upper layers are what
+  sink a proposal in the meeting room.
+
+The ladder:
+
+| layer | checks | note |
+|---|---|---|
+| L1 | connectivity | **gate** — a dead edge is withheld from L2–L8 and listed in `gated_out` |
+| L2 | security and exposure | |
+| L3 | reliability | |
+| L4 | data and residency | |
+| L5 | cost | |
+| L6 | operations | |
+| L7 | performance and scale | **always `UNCOVERED`** — the KG has no properties to decide it |
+| L8 | portability | derived from `equivalences.yaml` |
+
+A layer with `status: UNCOVERED` was **not** checked. Say so plainly. Never
+report it as passing, and never fill the gap with your own judgement — that
+applies to L7 on every single run.
+
+The ladder is `validate.py`'s decision tree, not yours. Do not reason through
+the layers yourself to reach a verdict; read the ones the script produced and
+explain them.
 
 Verdict meanings:
 
@@ -185,8 +209,11 @@ After every change:
 python3 scripts/check_kg.py
 ```
 
-This checks integrity and runs the regression suite. Watch the coverage number:
-if it drops, some rule accidentally became too narrow.
+This checks integrity and runs the regression suite. Watch two coverage
+figures: the L1 pair percentage, and the per-layer rule counts under
+`Layer coverage`. Either dropping means a rule accidentally became too narrow —
+the per-layer numbers exist because a single layer can go dead without moving
+the headline percentage much.
 
 ## Supporting files
 
@@ -195,6 +222,6 @@ if it drops, some rule accidentally became too narrow.
 - `references/translation.md` — cross-provider workflow and its traps
 - `references/rendering.md` — layout, icon, and label rules
 - `references/kg/` — the knowledge graph (nodes, rules, equivalences)
-- `scripts/validate.py` — two-layer validator
+- `scripts/validate.py` — L1-L8 ladder validator
 - `scripts/translate.py` — cross-provider translation
 - `scripts/check_kg.py` — KG integrity + regression

@@ -1,9 +1,9 @@
-# Layer 2 — architecture-level checks, not pairwise connection checks.
+# Layers 2-8 — architecture-level checks, not pairwise connection checks.
 #
-# Layer 1 answers "can A connect to B". Layer 2 answers the question the client's
-# architect actually asks in a design review: will this hold up, is it safe, and
-# is the cost predictable. This is what separates the skill from a diagram
-# generator.
+# Layer 1 answers "can A connect to B". Everything above it answers the question
+# the client's architect actually asks in a design review: will this hold up, is
+# it safe, is the cost predictable, and can we ever leave. This is what
+# separates the skill from a diagram generator.
 #
 # Each rule is implemented as a function in scripts/validate.py under the same
 # id. This file controls severity, wording, and parameters — so tuning does not
@@ -13,10 +13,72 @@
 #   environment: production | poc | dev
 #   data_residency: id | eu | us | none
 #   sla_tier: critical | standard | best_effort
+#
+# ---------------------------------------------------------------------------
+# The layer ladder (L1..L8)
+#
+# Every rule declares which layer it belongs to. The ladder is a decision tree
+# in validate.py, NOT a thinking framework for the model — the moment a verdict
+# depends on the model walking these rungs, the skill is a chatbot with
+# opinions and root invariant #1 is gone. The model reads the layered output
+# and explains it; it never decides a layer's outcome.
+#
+# Ordering is not cosmetic. L1 is a GATE: an edge that cannot connect at all
+# is excluded from L2-L8 for that edge, because "your unreachable database is
+# also publicly exposed" is cascade noise that buries the one finding that
+# matters. L2-L8 are independent of each other and all run — an architecture
+# can be perfectly secure and completely unaffordable.
+#
+# A layer with no rules yet reports UNCOVERED rather than passing silently
+# (root invariant #5). L7 is in that state deliberately: performance findings
+# need node properties the KG does not carry (scaling model, sync vs async,
+# throughput class), and inventing them from category alone would be guessing.
+
+layers:
+  - id: L0
+    title: Presentation
+    description: >-
+      Not part of the ladder proper. Diagram readability, which is a property
+      of the deliverable rather than of the architecture.
+  - id: L1
+    title: Connectivity
+    gate: true
+    description: >-
+      Can A reach B at all, and what component is missing. Implemented in
+      connectivity-rules.yaml, not here.
+  - id: L2
+    title: Security and exposure
+    description: Public exposure, authentication path, secrets, edge protection.
+  - id: L3
+    title: Reliability
+    description: Single points of failure, zone and region blast radius.
+  - id: L4
+    title: Data and residency
+    description: Durability, backup, and where data is legally allowed to live.
+  - id: L5
+    title: Cost
+    description: Egress, cross-region traffic, tier and capacity model mismatch.
+  - id: L6
+    title: Operations
+    description: Observability, and how much of the stack the client must run.
+  - id: L7
+    title: Performance and scale
+    status: uncovered
+    description: >-
+      Bottlenecks, synchronous coupling, throughput mismatch. NO RULES YET —
+      requires node properties the KG does not have. Reports UNCOVERED, which
+      is the honest answer, not a gap to paper over.
+  - id: L8
+    title: Portability
+    description: >-
+      Whether this design can move to the other provider. Derived from
+      equivalences.yaml. Directly relevant to the presales persona: a client
+      asking "are we locked in?" gets a derived answer, not a reassurance.
 
 rules:
 
   - id: SEC-001-PUBLIC-DATASTORE
+    layer: L2
     enabled: true
     severity: ERROR
     title: Datastore reachable over a public path
@@ -28,6 +90,7 @@ rules:
       connector), or move the compute inside the private network.
 
   - id: SEC-002-NO-SECRET-STORE
+    layer: L2
     enabled: true
     severity: WARNING
     title: No credential store
@@ -38,6 +101,7 @@ rules:
     remediation: Add Secret Manager / Key Vault to the architecture.
 
   - id: SEC-003-COMPUTE-EXPOSED
+    layer: L2
     enabled: true
     severity: WARNING
     title: Compute exposed with no managed entry point
@@ -48,6 +112,7 @@ rules:
     remediation: Put an L7 load balancer or gateway at the entry point.
 
   - id: REL-001-SINGLE-ZONE
+    layer: L3
     enabled: true
     severity: WARNING
     applies_when:
@@ -61,6 +126,7 @@ rules:
       a regional service.
 
   - id: REL-002-SINGLE-REGION
+    layer: L3
     enabled: true
     severity: INFO
     applies_when:
@@ -74,6 +140,7 @@ rules:
     remediation: Agree RTO/RPO with the client before committing to an SLA.
 
   - id: REL-003-NO-DATA-DURABILITY
+    layer: L4
     enabled: true
     severity: INFO
     title: No backup shown
@@ -84,6 +151,7 @@ rules:
     remediation: Annotate the backup policy on the datastore nodes.
 
   - id: COST-001-CROSS-REGION-TRAFFIC
+    layer: L5
     enabled: true
     severity: INFO
     title: Possible cross-region traffic
@@ -94,6 +162,7 @@ rules:
     remediation: Align the regions, or include egress in the cost estimate.
 
   - id: GOV-001-DATA-RESIDENCY
+    layer: L4
     enabled: true
     severity: WARNING
     applies_when:
@@ -109,6 +178,7 @@ rules:
       available before committing to the client.
 
   - id: OPS-001-NO-OBSERVABILITY
+    layer: L6
     enabled: true
     severity: INFO
     title: No observability component
@@ -117,7 +187,42 @@ rules:
       about in a production proposal.
     remediation: Add a monitoring note, or state that it is out of PoC scope.
 
+  # L8 — derived entirely from equivalences.yaml, so it costs no new node
+  # properties and cannot drift from what translate.py would actually do. Both
+  # ship at INFO regardless of how alarming they sound: per D14, a rule whose
+  # severity was reasoned rather than measured renders as INFO until it has
+  # been checked against real client material.
+  - id: PORT-001-NO-EQUIVALENT
+    layer: L8
+    enabled: true
+    severity: INFO
+    title: No equivalent at the other provider
+    message: >-
+      One or more services in this design have no recorded equivalent at the
+      other provider. This is a genuine lock-in point, and it is far better
+      raised by you in the proposal than by the client's architect six months
+      later.
+    remediation: >-
+      State the lock-in explicitly, or substitute a service that has an
+      equivalent if portability is a stated requirement. If the equivalent
+      exists but simply is not in the KG yet, add it with
+      cloud-architecture-validator-add — do not assume absence means lock-in.
+
+  - id: PORT-002-AMBIGUOUS-EQUIVALENT
+    layer: L8
+    enabled: true
+    severity: INFO
+    title: Translation is not one-to-one
+    message: >-
+      One or more services translate to several mutually exclusive options, or
+      only partially. A migration estimate that assumes a clean one-to-one
+      mapping will be wrong for these.
+    remediation: >-
+      Answer the selection question for each before quoting migration effort.
+      Run translate.py to see the options and their caveats.
+
   - id: VIZ-001-TOO-MANY-NODES
+    layer: L0
     enabled: true
     severity: INFO
     threshold: 20

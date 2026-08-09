@@ -25,7 +25,7 @@ Run this after every KG change. It guards four things:
 import datetime
 import json
 import os
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import kg as kg_module
@@ -279,6 +279,45 @@ def check_icon_regression(kg):
     return passed, failed, len(fixture["cases"])
 
 
+def check_layer_coverage(kg):
+    """Per-layer: does every rule in the layer still fire on something?
+
+    One global coverage number hides a layer narrowing to zero — L5 could stop
+    finding anything at all and the headline percentage would barely move. The
+    sweep runs each GCP pair through the validator under the most permissive
+    context (production / residency id / critical), because rules behind
+    `applies_when` never fire under the default PoC context and would look
+    dead for the wrong reason.
+
+    Reported, not enforced. Unlike a connectivity rule — which is unreachable
+    if no node pair satisfies it — an architecture rule can legitimately need
+    a shape no two-node pair produces. Failing the build on that would push
+    people to weaken rules to keep the check green.
+    """
+    ctx = {"environment": "production", "data_residency": "id", "sla_tier": "critical"}
+    fired = Counter()
+    gcp = [i for i in kg.services if kg.services[i]["provider"] == "gcp"]
+    for a in gcp:
+        for b in gcp:
+            if a == b:
+                continue
+            for f in validate([(a, b)], ctx, kg=kg)["architecture"]:
+                fired[f["rule_id"]] += 1
+
+    enabled = [r for r in kg.arch_rules if r.get("enabled", True)]
+    report = []
+    for layer in kg.arch_layers:
+        if layer["id"] == "L1":
+            continue
+        rules = [r for r in enabled if r.get("layer") == layer["id"]]
+        report.append({
+            "id": layer["id"], "title": layer["title"],
+            "rules": [(r["id"], fired[r["id"]]) for r in rules],
+            "uncovered": layer.get("status") == "uncovered" or not rules,
+        })
+    return report
+
+
 def check_regression(kg):
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     passed, failed, deviations = 0, [], 0
@@ -389,8 +428,21 @@ def main():
             v = validate([(a, b)], kg=kg)["connectivity"][0]["verdict"]
             if v not in ("UNCOVERED", "UNKNOWN_SERVICE"):
                 covered += 1
-    print(f"  directed GCP pairs: {pairs}, decided: {covered} ({covered/pairs:.0%})")
+    print(f"  L1 directed GCP pairs: {pairs}, decided: {covered} ({covered/pairs:.0%})")
     print("  (original draft: 20/462 = 4%)")
+
+    print("\n== Layer coverage (L2-L8) ==")
+    for layer in check_layer_coverage(kg):
+        if layer["uncovered"]:
+            print(f"  [~] {layer['id']} {layer['title']}: UNCOVERED — no rules, reports honestly")
+            continue
+        dead = [rid for rid, n in layer["rules"] if n == 0]
+        mark = "[~]" if dead else "[ok]"
+        print(f"  {mark} {layer['id']} {layer['title']}: "
+              + ", ".join(f"{rid}={n}" for rid, n in layer["rules"]))
+        for rid in dead:
+            print(f"       {rid} fired on no pair in the sweep — may need a shape "
+                  "two nodes cannot produce, or may have silently narrowed.")
 
     return 1 if (
         problems or prov_problems or failed or unreachable

@@ -48,8 +48,10 @@ python3 tools/sync_provider_inventory.py --list tools/sample_resource_types.txt
 python3 export_kg_graph.py --output ../visualizations/kg_graph.json
 ```
 
-`check_kg.py` must report clean integrity, **37/37 regression**, and coverage
+`check_kg.py` must report clean integrity, **37/37 regression**, and L1 coverage
 **≥80%** before anything ships. A coverage drop means a rule silently narrowed.
+It also reports per-layer coverage for L2–L8 (see D23); a layer whose rules stop
+firing is the same failure, hidden from the headline number.
 
 ## Invariants — do not break these without an explicit decision
 
@@ -275,6 +277,65 @@ invented date — they *are* hand-authored, but nobody re-reviewed them on
 2026-08-08 and the field should not say otherwise. `stale_after` warns
 rather than fails, and is what gives D17's quarterly cadence something
 concrete to act on.
+
+**D22 — No RAG, no embeddings, no vector store. The KG goes into context
+whole.** All six files total 46 KB (~12k tokens); `services.yaml` alone is
+17 KB for 45 nodes. Retrieval exists to select from a corpus that does not
+fit in context — a retriever here would shrink 12k tokens to 8k while adding
+a ranking layer that can be wrong. It can only subtract. The model is the
+semantic layer: it already knows Cloud SQL is a database without being told,
+which is precisely the "semantic search" a lexical scorer was being built to
+fake. A concrete attempt made this vivid: a hand-built scorer for
+`kg_explorer.html` ranked "Serverless VPC Access" second on the query
+*serverless public database*, and fixing that took a 50-entry synonym map
+plus a coverage-weighting term — machinery to approximate, badly, what the
+model does for free.
+
+Two further reasons this stays decided rather than deferred. First, vector
+search is the wrong tool for *structured* data regardless of scale: these are
+typed fields, and "reachability = public_or_private AND category = database"
+is a `WHERE` clause, not a cosine distance. When the KG does outgrow context,
+the answer is a query tool (D1's BigQuery stub), not embeddings. Second,
+anything that retrieves must stay clear of the decision path — retrieval that
+feeds `validate.py` a *subset* of the KG silently changes verdicts, which is
+invariant #1 violated by omission rather than by opinion. The retrieval panel
+in `kg_explorer.html` is therefore a **visualization** of what a question
+touches, explicitly not a retrieval step, and nothing downstream reads it.
+
+**D23 — Layer 2 is now a declared L1–L8 ladder, with L1 as a gate and L7
+deliberately empty.** D4 established that Layer 2 is the actual product; this
+gives it structure. The nine existing rules were regrouped, not rewritten
+(rule ids are unchanged — the 37/37 regression fixture depends on them, and
+`REL-003` sits under L4 despite its `REL-` prefix because backup is a data
+concern). Layers are declared in `architecture-rules.yaml` and every rule
+names one, so `check_kg.py` can report **per-layer** coverage: a single layer
+can go dead without moving the headline L1 percentage, which one global number
+would hide.
+
+Three properties worth keeping:
+
+*L1 gates.* An edge that cannot connect is withheld from L2–L8 (`gated_out`
+records what was withheld). Without this, one broken connection sprays derived
+findings across seven layers and buries the single finding that matters.
+Node-scoped rules still see the node — a zonal service is zonal whether or not
+one of its edges is broken.
+
+*L7 ships empty and says so.* Performance needs node properties the KG does
+not carry (scaling model, sync vs. async, throughput class). Inferring them
+from `category` would be guessing, so L7 reports `UNCOVERED` on every run —
+invariant #5 applied to a whole layer rather than a pair. Filling it means a
+human classification pass over all 45 entries under D6/D21, which is the real
+cost and the reason it is not done yet.
+
+*L8 was free.* Portability is derived entirely from `equivalences.yaml`, so it
+needed no schema change, and it cannot drift from what `translate.py` would
+actually do. It is also the layer most specific to this product's audience: a
+presales engineer asked "are we locked in?" gets a derived answer instead of a
+reassurance. Both PORT rules ship at INFO per D14. Note `PORT-001` must skip
+nodes whose roles are in `regenerate_roles` — connectors have no equivalents
+*by design* (equivalences.yaml drops and regenerates them at the target), and
+reading that absence as lock-in flagged all five connectors in the KG as
+unportable on the first run.
 
 ## Open questions
 

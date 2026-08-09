@@ -25,11 +25,15 @@ KG_DIR = Path(__file__).resolve().parent.parent / "references" / "kg"
 class KnowledgeGraph:
     def __init__(self, services, conn_rules, conn_fallback, arch_rules,
                  aliases, overrides, alternatives, equivalences,
-                 regenerate_roles, icons=None):
+                 regenerate_roles, icons=None, arch_layers=None):
         self.services = {s["id"]: s for s in services}
         self.conn_rules = conn_rules
         self.conn_fallback = conn_fallback
         self.arch_rules = arch_rules
+        # L0..L8 taxonomy. Ordered as declared so output and reports walk the
+        # ladder in the same order every time.
+        self.arch_layers = arch_layers or []
+        self.layers_by_id = {l["id"]: l for l in self.arch_layers}
         self.aliases = {a["alias"]: a for a in aliases}
         self.overrides = {(o["source"], o["target"]): o for o in overrides}
         self.alternatives = alternatives
@@ -168,7 +172,8 @@ def load(backend=None):
 def _load_local():
     services = _read("services.yaml")["services"]
     conn = _read("connectivity-rules.yaml")
-    arch = _read("architecture-rules.yaml")["rules"]
+    arch_doc = _read("architecture-rules.yaml")
+    arch = arch_doc["rules"]
     ov = _read("overrides.yaml")
     eq = _read("equivalences.yaml")
     icons = _read("icons.yaml")
@@ -177,6 +182,7 @@ def _load_local():
         conn_rules=conn["rules"],
         conn_fallback=conn["fallback"],
         arch_rules=arch,
+        arch_layers=arch_doc.get("layers", []) or [],
         aliases=ov.get("aliases", []) or [],
         overrides=ov.get("overrides", []) or [],
         alternatives=ov.get("alternatives", []) or [],
@@ -202,5 +208,5 @@ if __name__ == "__main__":
         providers[s["provider"]] = providers.get(s["provider"], 0) + 1
     print("nodes:", providers)
     print("connectivity rules:", len(kg.conn_rules))
-    print("architecture rules:", len(kg.arch_rules))
+    print("architecture rules:", len(kg.arch_rules), "across", len(kg.arch_layers), "layers")
     print("equivalence entries:", len(kg.equivalences))

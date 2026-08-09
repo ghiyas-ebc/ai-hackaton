@@ -1,17 +1,24 @@
 """
-Architecture validator — two layers.
+Architecture validator — a layer ladder, L1 through L8.
 
-Layer 1 (connectivity): can A reach B, and what component is missing. Derived
-from node properties via connectivity-rules.yaml rather than from a list of
-pairs. Consequence: a pair nobody ever entered still gets a verdict, as long as
-both nodes are known.
+L1 (connectivity): can A reach B, and what component is missing. Derived from
+node properties via connectivity-rules.yaml rather than from a list of pairs.
+Consequence: a pair nobody ever entered still gets a verdict, as long as both
+nodes are known.
 
-Layer 2 (architecture): will this design hold up, is it safe, is the cost
-predictable. These are the questions a client's architect asks in design review.
+L2-L8 (architecture): will this design hold up, is it safe, is the cost
+predictable, can it ever move. These are the questions a client's architect
+asks in design review. Layer definitions live in architecture-rules.yaml.
 
-No LLM sits in the decision path. The language model's job is to turn the user's
-description into (source, target) pairs and to communicate the result in
-language a salesperson can use — not to decide what is valid.
+L1 is a gate. An edge that cannot connect is dropped from the input to L2-L8,
+because "your unreachable database is also publicly exposed" is cascade noise
+that buries the finding that matters. What was suppressed is always reported,
+never silently dropped.
+
+No LLM sits in the decision path — the ladder is a decision tree in code, not
+a thinking framework the model walks. The language model's job is to turn the
+user's description into (source, target) pairs and to communicate the result in
+language a salesperson can use — not to decide what is valid, at any layer.
 
 Usage:
     python3 validate.py --edges "cloud-run>cloud-sql,cloud-load-balancing>cloud-run"
@@ -164,7 +171,13 @@ def validate_connectivity(kg, edges, notes):
     return results
 
 
-# --------------------------------------------------------------- layer 2 ---
+# ------------------------------------------------------------- layers 2-8 ---
+# Verdicts that mean "this edge does not work at all". The nodes on such an
+# edge still exist in the design, so they stay in the node set — but the edge
+# itself is withheld from rules that reason about traffic paths.
+_DEAD_EDGE_VERDICTS = {"BLOCKED", "UNKNOWN_SERVICE"}
+
+
 def _ctx_ok(rule, ctx):
     aw = rule.get("applies_when")
     if not aw:
@@ -177,7 +190,10 @@ def validate_architecture(kg, nodes, conn_results, ctx):
     findings = []
 
     def emit(rule, detail=None):
+        layer = rule.get("layer")
         findings.append({
+            "layer": layer,
+            "layer_title": (kg.layers_by_id.get(layer) or {}).get("title"),
             "rule_id": rule["id"], "severity": rule["severity"],
             "title": rule["title"], "message": rule["message"].strip(),
             "remediation": rule.get("remediation", "").strip(),
@@ -256,6 +272,38 @@ def validate_architecture(kg, nodes, conn_results, ctx):
     if r and ctx.get("environment") == "production":
         emit(r)
 
+    # PORT-001 / PORT-002 — L8 portability, read straight off equivalences.yaml.
+    # "The other provider" is every provider in the KG that isn't this node's
+    # own, so this keeps working unchanged when AWS or Huawei land.
+    all_providers = {n["provider"] for n in kg.services.values()}
+    no_equiv, ambiguous = [], []
+    for n in nodes:
+        # Connectors have no equivalents on purpose — equivalences.yaml drops
+        # them and lets the target provider's own connectivity rules regenerate
+        # what it needs. Reading that absence as lock-in would flag every
+        # private-connectivity component in the KG as unportable, which is the
+        # opposite of true.
+        if set(n.get("roles", [])) & kg.regenerate_roles:
+            continue
+        for target_provider in sorted(all_providers - {n["provider"]}):
+            equivs, criteria = kg.equivalents(n["id"], target_provider)
+            if not equivs:
+                no_equiv.append(f"{n['id']} -> {target_provider}")
+            elif criteria or len(equivs) > 1 or any(e.get("level") == "PARTIAL" for e in equivs):
+                ambiguous.append({
+                    "service": n["id"], "to": target_provider,
+                    "options": [e["id"] for e in equivs],
+                    "question": criteria,
+                })
+
+    r = rule("PORT-001-NO-EQUIVALENT")
+    if r and no_equiv:
+        emit(r, sorted(no_equiv))
+
+    r = rule("PORT-002-AMBIGUOUS-EQUIVALENT")
+    if r and ambiguous:
+        emit(r, ambiguous)
+
     # VIZ-001 — diagram density
     r = rule("VIZ-001-TOO-MANY-NODES")
     if r and len(node_ids) > r.get("threshold", 20):
@@ -265,6 +313,47 @@ def validate_architecture(kg, nodes, conn_results, ctx):
 
 
 # ---------------------------------------------------------------- orchestration
+def _layer_report(kg, conn, arch, gated):
+    """One entry per declared layer, walked in ladder order.
+
+    Every layer reports its own status even when it found nothing, because
+    "L4 checked and found nothing" and "L4 has no rules and checked nothing"
+    are different answers and collapsing them into silence is exactly the
+    guessing this skill refuses to do (root invariant #5).
+    """
+    enabled = [r for r in kg.arch_rules if r.get("enabled", True)]
+    out = []
+    for layer in kg.arch_layers:
+        lid = layer["id"]
+        if lid == "L1":
+            findings = [c for c in conn if c.get("severity") in ("ERROR", "WARNING")]
+            rules_here = kg.conn_rules
+        else:
+            findings = [f for f in arch if f.get("layer") == lid]
+            rules_here = [r for r in enabled if r.get("layer") == lid]
+
+        if layer.get("status") == "uncovered" or not rules_here:
+            status = "UNCOVERED"
+        elif findings:
+            status = max(
+                (f.get("severity") for f in findings),
+                key=lambda s: SEVERITY_ORDER.get(s, 0),
+            )
+        else:
+            status = "CLEAN"
+
+        entry = {
+            "id": lid, "title": layer["title"], "status": status,
+            "rules_active": len(rules_here), "findings": len(findings),
+        }
+        if status == "UNCOVERED":
+            entry["why_uncovered"] = layer.get("description", "").strip()
+        if layer.get("gate") and gated:
+            entry["gated_out"] = gated
+        out.append(entry)
+    return out
+
+
 def validate(edges, context=None, kg=None):
     kg = kg or kg_module.load()
     ctx = {"environment": "poc", "data_residency": "none", "sla_tier": "standard"}
@@ -281,7 +370,17 @@ def validate(edges, context=None, kg=None):
                 node_ids.add(node["id"])
                 nodes.append(node)
 
-    arch = validate_architecture(kg, nodes, conn, ctx)
+    # L1 gate. Edges that cannot carry traffic are withheld from L2-L8 so a
+    # single broken connection doesn't spray derived findings across every
+    # layer. The nodes stay — a node-scoped rule (zonal, residency, lock-in)
+    # is still true about a service whose one edge happens to be broken.
+    live_conn = [c for c in conn if c["verdict"] not in _DEAD_EDGE_VERDICTS]
+    gated = [
+        {"edge": f"{c['source']} -> {c['target']}", "verdict": c["verdict"]}
+        for c in conn if c["verdict"] in _DEAD_EDGE_VERDICTS
+    ]
+
+    arch = validate_architecture(kg, nodes, live_conn, ctx)
 
     alts = []
     for a in kg.alternatives:
@@ -300,8 +399,9 @@ def validate(edges, context=None, kg=None):
         + [0]
     )
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "context": ctx,
+        "layers": _layer_report(kg, conn, arch, gated),
         "summary": {
             "nodes": len(node_ids),
             "edges": len(conn),
