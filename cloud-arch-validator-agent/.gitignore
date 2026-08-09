@@ -1,6 +1,9 @@
 # Verdict Card Gap Report — runtime-appended log, not source
 app/references/gap_report.jsonl
 
+# agents-cli eval output — generated traces/grades, not source
+artifacts/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
