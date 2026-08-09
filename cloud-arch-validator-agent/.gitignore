@@ -1,3 +1,6 @@
+# Verdict Card Gap Report — runtime-appended log, not source
+app/references/gap_report.jsonl
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

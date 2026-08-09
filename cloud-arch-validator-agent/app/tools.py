@@ -22,6 +22,7 @@ import export_kg_graph as export_module
 import kg as kg_module
 import translate as translate_module
 import validate as validate_module
+import verdict_card as verdict_card_module
 
 # The KG is ~46 KB of YAML across six files and never changes at runtime
 # (nothing in the validate path writes to it), so load it once per process.
@@ -67,6 +68,57 @@ def validate_architecture(edges: str, environment: str = "poc",
         "sla_tier": sla_tier,
     }
     return validate_module.validate(_parse_edges(edges), context=context, kg=_KG)
+
+
+def generate_verdict_card(edges: str, environment: str = "", data_residency: str = "",
+                          sla_tier: str = "", stated_needs: str = "") -> dict:
+    """Build a Verdict Card: one difficulty verdict, tiered findings, mismatch
+    detection, an engineer checklist, and automatic Gap Report logging.
+
+    This is the primary tool for a live sales conversation — prefer it over
+    calling validate_architecture directly when the rep wants a card-style
+    answer rather than a raw findings dump. Every field is derived from the
+    rule engine and the knowledge graph, never from your own judgment.
+
+    Each finding is tagged with exactly one evidence tier:
+    - 'Proven': a rule matched definitively and every involved service's KG
+      entry has been human-confirmed.
+    - 'Theoretically Possible': no rule/history covers this — not ruled out,
+      but not backed by anything either. Say so plainly, do not guess.
+    - 'Requires Deep Review': conflicts with a known rule, or an involved
+      service's KG entry is unverified, or the service could not be resolved.
+
+    Leave environment/data_residency/sla_tier empty if the rep doesn't know —
+    the tool proceeds on a stated default and reports it as an assumption on
+    the card. Do not stop the conversation to ask for these.
+
+    Any finding that is UNCOVERED or an unknown service is automatically
+    logged to the Gap Report — this happens unconditionally, you do not need
+    to do anything to trigger it and should not ask the user for permission.
+
+    Args:
+        edges: Connections as 'source>target' pairs, comma-separated.
+        environment: 'poc', 'staging', or 'production'. Leave empty if unknown.
+        data_residency: e.g. 'none', 'indonesia', 'eu'. Leave empty if unknown.
+        sla_tier: 'standard' or 'high'. Leave empty if unknown.
+        stated_needs: Comma-separated plain-language statement of what the
+            client said they need (e.g. 'real-time updates,websockets'), used
+            only to check for a mismatch between the client's stated ask and
+            the actual requirement. Leave empty to skip mismatch checking.
+
+    Returns:
+        {'difficulty', 'difficulty_reason', 'findings' (each with 'tier'),
+        'mismatches', 'checklist', 'checklist_empty_reason', 'assumptions',
+        'context'}.
+    """
+    return verdict_card_module.generate_verdict_card(
+        edges,
+        environment=environment or None,
+        data_residency=data_residency or None,
+        sla_tier=sla_tier or None,
+        stated_needs=stated_needs,
+        kg=_KG,
+    )
 
 
 def translate_architecture(edges: str, target_provider: str,
@@ -289,6 +341,7 @@ def init_kg_from_catalog(source: str = "", version_tag: str = "") -> dict:
 
 ALL_TOOLS = [
     validate_architecture,
+    generate_verdict_card,
     translate_architecture,
     lookup_service,
     search_services,

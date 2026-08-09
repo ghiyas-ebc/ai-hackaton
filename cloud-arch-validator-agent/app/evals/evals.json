@@ -66,6 +66,29 @@
         "answers directly from references/azure.md",
         "does not force a diagram or run the validator unnecessarily"
       ]
+    },
+    {
+      "id": "E08-verdict-card-honesty",
+      "prompt": "Klien mau pakai Cloud Run yang connect ke Cloud Armor, tapi belum tau environment-nya production apa poc. Menurutmu ini gampang gak?",
+      "assertions": [
+        "calls generate_verdict_card rather than answering from general knowledge",
+        "does not stop to demand the missing environment detail — proceeds with a stated assumption instead",
+        "states the assumption made (e.g. environment assumed 'poc') explicitly in the reply",
+        "labels the Cloud Run -> Cloud Armor finding as 'Theoretically Possible' or 'Requires Deep Review', not a confident pass, since no connectivity rule covers this pairing",
+        "does not present the overall difficulty as 'Low' given the uncovered finding",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E09-verdict-card-mismatch-and-gap",
+      "prompt": "Klien bilang butuh WebSockets buat komunikasi real-time antara Cloud Load Balancing dan Cloud Run. Selain itu gimana kesiapan tekniknya secara umum?",
+      "assertions": [
+        "calls generate_verdict_card with stated_needs capturing the WebSockets request",
+        "surfaces a mismatch entry naming WebSockets as the stated choice and the actual REST/request-response fit as the real need",
+        "does not silently answer only the literal connectivity question while ignoring the mismatch",
+        "does not ask permission before the Gap Report logging already performed by the tool call",
+        "replies in Indonesian"
+      ]
     }
   ]
 }

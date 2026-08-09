@@ -3,9 +3,19 @@
 ## What this project is
 
 An ADK agent front-end for the four `cloud-architecture-validator-*` skills in
-the parent repository. It exposes their scripts as nine tools and lets a
+the parent repository. It exposes their scripts as ten tools and lets a
 salesperson or presales engineer describe an architecture in prose instead of
 assembling a `--edges "a>b,b>c"` string by hand.
+
+`generate_verdict_card` (in `app/kg_lib/verdict_card.py`) is the primary tool
+for a live sales conversation: it wraps `validate_architecture`'s output into
+a Verdict Card — one difficulty label, every finding tagged with an evidence
+tier (`Proven` / `Theoretically Possible` / `Requires Deep Review`), optional
+tech-mismatch detection, an engineer checklist, and automatic Gap Report
+logging to `app/references/gap_report.jsonl` for anything uncovered. See
+`specs/001-verdict-card/` in the parent repo for the full design. Like
+everything else here, it is a pure transformation over the rule engine's
+output — no tier, score, or checklist item is decided by the model.
 
 **The rule engine decides, the model does not.** That is the parent repo's root
 invariant #1 and it survives intact here: `app/tools.py` calls `validate.py` and
@@ -49,7 +59,7 @@ the parent repo first.
 ### Checks
 
 ```bash
-uv run pytest tests/unit tests/integration   # 17 tests; unit tests cover all 9 tools
+uv run pytest tests/unit tests/integration   # unit tests cover all 10 tools
 uv run ruff check app tests
 ```
 

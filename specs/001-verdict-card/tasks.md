@@ -36,11 +36,11 @@ Single project, additive module inside the existing `cloud-arch-validator-agent/
 
 **Purpose**: Scaffold the new module and test file so implementation tasks have somewhere to land
 
-- [ ] T001 Create module skeleton (docstring, imports of `kg_lib.validate` and `kg_lib.kg`) in
+- [X] T001 Create module skeleton (docstring, imports of `kg_lib.validate` and `kg_lib.kg`) in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T002 [P] Create test file skeleton with a shared fixture that loads the real KG via
+- [X] T002 [P] Create test file skeleton with a shared fixture that loads the real KG via
       `kg_module.load()` in cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T003 [P] Add `app/references/gap_report.jsonl` to cloud-arch-validator-agent/.gitignore (runtime
+- [X] T003 [P] Add `app/references/gap_report.jsonl` to cloud-arch-validator-agent/.gitignore (runtime
       data, not source)
 
 **Checkpoint**: Module and test file exist and import cleanly.
@@ -53,15 +53,15 @@ Single project, additive module inside the existing `cloud-arch-validator-agent/
 
 **⚠️ CRITICAL**: No user story task may start until this phase is complete
 
-- [ ] T004 Define `VerdictCard`, `Finding`, `MismatchEntry`, `ChecklistItem`, `GapRecord` dict-shape
+- [X] T004 Define `VerdictCard`, `Finding`, `MismatchEntry`, `ChecklistItem`, `GapRecord` dict-shape
       constructors per data-model.md in cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T005 [P] Implement a node-provenance lookup helper (given a list of node ids, return each node's
+- [X] T005 [P] Implement a node-provenance lookup helper (given a list of node ids, return each node's
       `provenance.status`) using the existing `kg.py` resolver in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T006 Implement extraction of one `Finding`-shaped record per connectivity/architecture entry from
+- [X] T006 Implement extraction of one `Finding`-shaped record per connectivity/architecture entry from
       `validate()`'s output (walks `connectivity` and `architecture` lists, not yet tiered) in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T004)
-- [ ] T007 Register a `generate_verdict_card` stub tool (accepts the contract's signature, returns a
+- [X] T007 Register a `generate_verdict_card` stub tool (accepts the contract's signature, returns a
       not-yet-implemented placeholder) in cloud-arch-validator-agent/app/tools.py, added to `ALL_TOOLS`
       (depends on T004)
 
@@ -80,37 +80,37 @@ confirm a single card is returned with one difficulty label and every finding in
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Regression fixture: architecture where every edge is KG-clean and provenance
+- [X] T008 [P] [US1] Regression fixture: architecture where every edge is KG-clean and provenance
       `manual`/`verified` → difficulty `Low`, every finding tier `Proven`, in
       cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T009 [P] [US1] Regression fixture: architecture containing one rule-violating edge → difficulty
+- [X] T009 [P] [US1] Regression fixture: architecture containing one rule-violating edge → difficulty
       reflects the worst finding, and that finding is distinguishable from the others, in
       cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T010 [P] [US1] Regression fixture: architecture containing one uncovered edge (no rule, no
+- [X] T010 [P] [US1] Regression fixture: architecture containing one uncovered edge (no rule, no
       precedent) → that finding tiers as `Requires Deep Review` or `Theoretically Possible` per
       research.md, and overall difficulty is never a confident `Low`, in
       cloud-arch-validator-agent/tests/unit/test_verdict_card.py
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement the evidence-tier classification function (Proven / Theoretically Possible /
+- [X] T011 [US1] Implement the evidence-tier classification function (Proven / Theoretically Possible /
       Requires Deep Review) per the research.md decision table in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T006, T005)
-- [ ] T012 [US1] Implement the difficulty rollup function (extends `SEVERITY_ORDER`, handles the
+- [X] T012 [US1] Implement the difficulty rollup function (extends `SEVERITY_ORDER`, handles the
       all-uncovered → `Unassessed` edge case from spec.md) in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T011)
-- [ ] T013 [US1] Implement `difficulty_reason` generation naming the specific driving finding(s) (FR-004)
+- [X] T013 [US1] Implement `difficulty_reason` generation naming the specific driving finding(s) (FR-004)
       in cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T012)
-- [ ] T014 [US1] Implement `generate_verdict_card()` core assembly — calls `validate()`, builds
+- [X] T014 [US1] Implement `generate_verdict_card()` core assembly — calls `validate()`, builds
       `findings`, `difficulty`, `difficulty_reason`, `assumptions` (from context defaults substituted per
       FR-010); `mismatches` and `checklist` left empty at this stage — in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T011, T012, T013)
-- [ ] T015 [US1] Replace the stub tool with the real implementation in
+- [X] T015 [US1] Replace the stub tool with the real implementation in
       cloud-arch-validator-agent/app/tools.py (depends on T014, T007)
-- [ ] T016 [US1] Update the agent instruction to present card fields (difficulty, tiered findings,
+- [X] T016 [US1] Update the agent instruction to present card fields (difficulty, tiered findings,
       assumptions) instead of narrating raw tool output, in cloud-arch-validator-agent/app/agent.py
       (depends on T015)
-- [ ] T017 [US1] Run quickstart.md Scenarios 1 and 2 manually to confirm end-to-end behavior (depends on
+- [X] T017 [US1] Run quickstart.md Scenarios 1 and 2 manually to confirm end-to-end behavior (depends on
       T015)
 
 **Checkpoint**: User Story 1 fully functional and independently testable — this is the MVP.
@@ -127,25 +127,25 @@ fit the requirement; confirm a distinct mismatch entry appears naming both sides
 
 ### Tests for User Story 2
 
-- [ ] T018 [P] [US2] Regression fixture: `stated_needs` naming a poor-fit technology → one mismatch entry
+- [X] T018 [P] [US2] Regression fixture: `stated_needs` naming a poor-fit technology → one mismatch entry
       naming both the stated choice and the actual need, in
       cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T019 [P] [US2] Regression fixture: `stated_needs` matching the actual requirement → `mismatches` is
+- [X] T019 [P] [US2] Regression fixture: `stated_needs` matching the actual requirement → `mismatches` is
       empty, in cloud-arch-validator-agent/tests/unit/test_verdict_card.py
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Define the mismatch rule table (stated-need keyword → best-fit role/category) per
+- [X] T020 [US2] Define the mismatch rule table (stated-need keyword → best-fit role/category) per
       research.md in cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T021 [US2] Implement mismatch detection using `stated_needs` against the rule table and
+- [X] T021 [US2] Implement mismatch detection using `stated_needs` against the rule table and
       `search_services`/KG role lookups, producing `MismatchEntry` records, in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T020)
-- [ ] T022 [US2] Wire the `stated_needs` parameter through `generate_verdict_card()` and the tool
+- [X] T022 [US2] Wire the `stated_needs` parameter through `generate_verdict_card()` and the tool
       signature in cloud-arch-validator-agent/app/kg_lib/verdict_card.py and
       cloud-arch-validator-agent/app/tools.py (depends on T021, T014)
-- [ ] T023 [US2] Update the agent instruction to relay mismatch entries as a client-conversation
+- [X] T023 [US2] Update the agent instruction to relay mismatch entries as a client-conversation
       correction, in cloud-arch-validator-agent/app/agent.py (depends on T022)
-- [ ] T024 [US2] Run quickstart.md Scenario 4 manually to confirm end-to-end behavior (depends on T022)
+- [X] T024 [US2] Run quickstart.md Scenario 4 manually to confirm end-to-end behavior (depends on T022)
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
@@ -160,23 +160,23 @@ exists per such finding, worded as a concrete action.
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Regression fixture: card with non-proven findings → checklist has exactly one item
+- [X] T025 [P] [US3] Regression fixture: card with non-proven findings → checklist has exactly one item
       per such finding, in cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T026 [P] [US3] Regression fixture: card where every finding is `Proven` → checklist is empty and
+- [X] T026 [P] [US3] Regression fixture: card where every finding is `Proven` → checklist is empty and
       `checklist_empty_reason` is set, in cloud-arch-validator-agent/tests/unit/test_verdict_card.py
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Implement per-tier checklist item templates (Theoretically Possible / Requires Deep
+- [X] T027 [US3] Implement per-tier checklist item templates (Theoretically Possible / Requires Deep
       Review wording) per research.md in cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T028 [US3] Implement checklist generation building a 1:1 list from non-Proven findings and setting
+- [X] T028 [US3] Implement checklist generation building a 1:1 list from non-Proven findings and setting
       `checklist_empty_reason` when empty, in cloud-arch-validator-agent/app/kg_lib/verdict_card.py
       (depends on T027, T014)
-- [ ] T029 [US3] Wire checklist generation into `generate_verdict_card()`'s return value in
+- [X] T029 [US3] Wire checklist generation into `generate_verdict_card()`'s return value in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T028)
-- [ ] T030 [US3] Update the agent instruction to present the checklist section (or its empty-reason) in
+- [X] T030 [US3] Update the agent instruction to present the checklist section (or its empty-reason) in
       cloud-arch-validator-agent/app/agent.py (depends on T029)
-- [ ] T031 [US3] Run quickstart.md Scenario 5 manually to confirm the 1:1 correspondence (depends on
+- [X] T031 [US3] Run quickstart.md Scenario 5 manually to confirm the 1:1 correspondence (depends on
       T029)
 
 **Checkpoint**: User Stories 1, 2, and 3 all work independently.
@@ -192,22 +192,22 @@ is appended to the Gap Record log, retrievable independently of the conversation
 
 ### Tests for User Story 4
 
-- [ ] T032 [P] [US4] Regression fixture: an `UNCOVERED`/`UNKNOWN_SERVICE` finding appends one matching
+- [X] T032 [P] [US4] Regression fixture: an `UNCOVERED`/`UNKNOWN_SERVICE` finding appends one matching
       line to the gap log, in cloud-arch-validator-agent/tests/unit/test_verdict_card.py
-- [ ] T033 [P] [US4] Regression fixture: the same gap occurring twice across two separate calls produces
+- [X] T033 [P] [US4] Regression fixture: the same gap occurring twice across two separate calls produces
       two separate log lines, not one deduplicated entry, in
       cloud-arch-validator-agent/tests/unit/test_verdict_card.py
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Implement the `GapRecord` builder (`logged_at`, `request_summary`, `unresolved_element`,
+- [X] T034 [US4] Implement the `GapRecord` builder (`logged_at`, `request_summary`, `unresolved_element`,
       `reason`) per data-model.md in cloud-arch-validator-agent/app/kg_lib/verdict_card.py
-- [ ] T035 [US4] Implement the append-only writer to
+- [X] T035 [US4] Implement the append-only writer to
       cloud-arch-validator-agent/app/references/gap_report.jsonl (depends on T034)
-- [ ] T036 [US4] Wire a gap-record write into `generate_verdict_card()` for every
+- [X] T036 [US4] Wire a gap-record write into `generate_verdict_card()` for every
       `UNCOVERED`/`UNKNOWN_SERVICE` finding, unconditionally (no confirmation gate, per Constitution
       Principle IV) in cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T035, T014)
-- [ ] T037 [US4] Run quickstart.md Scenario 3 manually to confirm the log entry appears (depends on T036)
+- [X] T037 [US4] Run quickstart.md Scenario 3 manually to confirm the log entry appears (depends on T036)
 
 **Checkpoint**: All four user stories independently functional.
 
@@ -218,15 +218,15 @@ is appended to the Gap Record log, retrievable independently of the conversation
 **Purpose**: Documentation, end-to-end validation, and the eval-credibility gap flagged in the prior
 constitution discussion (D15-equivalent)
 
-- [ ] T038 [P] Document the `generate_verdict_card` tool and Verdict Card output shape in
+- [X] T038 [P] Document the `generate_verdict_card` tool and Verdict Card output shape in
       cloud-arch-validator-agent/README.md
-- [ ] T039 Confirm `FR-010`'s assumption-labeling covers every context field (`environment`,
+- [X] T039 Confirm `FR-010`'s assumption-labeling covers every context field (`environment`,
       `data_residency`, `sla_tier`) not explicitly supplied by the caller, in
       cloud-arch-validator-agent/app/kg_lib/verdict_card.py (depends on T014)
-- [ ] T040 [P] Add an eval case to cloud-arch-validator-agent/app/evals/evals.json (or a new
+- [X] T040 [P] Add an eval case to cloud-arch-validator-agent/app/evals/evals.json (or a new
       verdict-card-specific eval file) proving the agent reports a `Requires Deep Review`/uncovered tier
       rather than guessing a confident verdict, addressing the still-open D15 gap noted for this agent
-- [ ] T041 Run the full suite (`uv run pytest tests/unit/test_verdict_card.py`) and the complete
+- [X] T041 Run the full suite (`uv run pytest tests/unit/test_verdict_card.py`) and the complete
       quickstart.md scenario list end-to-end from cloud-arch-validator-agent/
 
 ---
