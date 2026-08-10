@@ -1,0 +1,429 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "E01-serverless-db",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Tolong bikinin diagram arsitektur GCP buat proposal klien: ada web app, backend-nya pakai Cloud Run, terus connect ke Cloud SQL. Di depannya ada load balancer."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E01-serverless-db-A01",
+              "content": {
+                "property": {
+                  "description": "runs scripts/validate.py rather than judging validity itself"
+                }
+              }
+            },
+            {
+              "rubric_id": "E01-serverless-db-A02",
+              "content": {
+                "property": {
+                  "description": "inserts Serverless VPC Access on the Cloud Run -> Cloud SQL path instead of drawing a direct line"
+                }
+              }
+            },
+            {
+              "rubric_id": "E01-serverless-db-A03",
+              "content": {
+                "property": {
+                  "description": "explains that a public path to the database will become a security-review finding"
+                }
+              }
+            },
+            {
+              "rubric_id": "E01-serverless-db-A04",
+              "content": {
+                "property": {
+                  "description": "reports at least one layer-2 finding (the absent secret store)"
+                }
+              }
+            },
+            {
+              "rubric_id": "E01-serverless-db-A05",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E02-cross-cloud",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Yang di GCP: Cloud Run, Cloud SQL, Pub/Sub, sama Cloud Load Balancing."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E02-cross-cloud-A01",
+              "content": {
+                "property": {
+                  "description": "runs scripts/translate.py"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02-cross-cloud-A02",
+              "content": {
+                "property": {
+                  "description": "ASKS the user about Pub/Sub (Service Bus vs Event Grid) and Cloud Load Balancing (L4 / regional L7 / global L7) instead of choosing"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02-cross-cloud-A03",
+              "content": {
+                "property": {
+                  "description": "does not translate GCP connectors one by one"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02-cross-cloud-A04",
+              "content": {
+                "property": {
+                  "description": "after the choices are given, shows VNet Integration emerging from the Azure rules"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02-cross-cloud-A05",
+              "content": {
+                "property": {
+                  "description": "surfaces caveats for every PARTIAL equivalent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E03-unknown-service",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Bisa cek arsitektur ini? Cloud Run nyambung ke Cloud Composer terus ke BigQuery."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E03-unknown-service-A01",
+              "content": {
+                "property": {
+                  "description": "flags Cloud Composer as absent from the knowledge graph"
+                }
+              }
+            },
+            {
+              "rubric_id": "E03-unknown-service-A02",
+              "content": {
+                "property": {
+                  "description": "does NOT infer the connection's validity from general knowledge"
+                }
+              }
+            },
+            {
+              "rubric_id": "E03-unknown-service-A03",
+              "content": {
+                "property": {
+                  "description": "proposes adding it to the KG rather than simply refusing"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E04-alternative-confusion",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Aku mau arsitektur yang pakai Cloud SQL dan Spanner dua-duanya, terus ada Cloud Run di depannya."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E04-alternative-confusion-A01",
+              "content": {
+                "property": {
+                  "description": "explains that Cloud SQL and Spanner are mutually exclusive choices, not components used together"
+                }
+              }
+            },
+            {
+              "rubric_id": "E04-alternative-confusion-A02",
+              "content": {
+                "property": {
+                  "description": "does not present both as a valid architecture without a warning"
+                }
+              }
+            },
+            {
+              "rubric_id": "E04-alternative-confusion-A03",
+              "content": {
+                "property": {
+                  "description": "asks the question that decides between them"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E05-residency",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Buat arsitektur produksi untuk klien bank di Indonesia: API di Cloud Run, data di Firestore, analitik di BigQuery."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E05-residency-A01",
+              "content": {
+                "property": {
+                  "description": "asks for or applies residency=id and environment=production"
+                }
+              }
+            },
+            {
+              "rubric_id": "E05-residency-A02",
+              "content": {
+                "property": {
+                  "description": "surfaces GOV-001 for the multi-region datastores"
+                }
+              }
+            },
+            {
+              "rubric_id": "E05-residency-A03",
+              "content": {
+                "property": {
+                  "description": "states the compliance implication in language that can be taken to the client, not jargon"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E06-no-provider",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Bantu gambarin arsitektur buat aplikasi e-commerce sederhana dong."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E06-no-provider-A01",
+              "content": {
+                "property": {
+                  "description": "asks which provider before proceeding"
+                }
+              }
+            },
+            {
+              "rubric_id": "E06-no-provider-A02",
+              "content": {
+                "property": {
+                  "description": "does not default to GCP merely because it is first in the KG"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E07-not-a-diagram-request",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Apa bedanya Event Grid sama Service Bus?"
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E07-not-a-diagram-request-A01",
+              "content": {
+                "property": {
+                  "description": "answers directly from references/azure.md"
+                }
+              }
+            },
+            {
+              "rubric_id": "E07-not-a-diagram-request-A02",
+              "content": {
+                "property": {
+                  "description": "does not force a diagram or run the validator unnecessarily"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E08-verdict-card-honesty",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Klien mau pakai Cloud Run yang connect ke Cloud Armor, tapi belum tau environment-nya production apa poc. Menurutmu ini gampang gak?"
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E08-verdict-card-honesty-A01",
+              "content": {
+                "property": {
+                  "description": "calls generate_verdict_card rather than answering from general knowledge"
+                }
+              }
+            },
+            {
+              "rubric_id": "E08-verdict-card-honesty-A02",
+              "content": {
+                "property": {
+                  "description": "does not stop to demand the missing environment detail — proceeds with a stated assumption instead"
+                }
+              }
+            },
+            {
+              "rubric_id": "E08-verdict-card-honesty-A03",
+              "content": {
+                "property": {
+                  "description": "states the assumption made (e.g. environment assumed 'poc') explicitly in the reply"
+                }
+              }
+            },
+            {
+              "rubric_id": "E08-verdict-card-honesty-A04",
+              "content": {
+                "property": {
+                  "description": "labels the Cloud Run -> Cloud Armor finding as 'Theoretically Possible' or 'Requires Deep Review', not a confident pass, since no connectivity rule covers this pairing"
+                }
+              }
+            },
+            {
+              "rubric_id": "E08-verdict-card-honesty-A05",
+              "content": {
+                "property": {
+                  "description": "does not present the overall difficulty as 'Low' given the uncovered finding"
+                }
+              }
+            },
+            {
+              "rubric_id": "E08-verdict-card-honesty-A06",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "E09-verdict-card-mismatch-and-gap",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Klien bilang butuh WebSockets buat komunikasi real-time antara Cloud Load Balancing dan Cloud Run. Selain itu gimana kesiapan tekniknya secara umum?"
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E09-verdict-card-mismatch-and-gap-A01",
+              "content": {
+                "property": {
+                  "description": "calls generate_verdict_card with stated_needs capturing the WebSockets request"
+                }
+              }
+            },
+            {
+              "rubric_id": "E09-verdict-card-mismatch-and-gap-A02",
+              "content": {
+                "property": {
+                  "description": "surfaces a mismatch entry naming WebSockets as the stated choice and the actual REST/request-response fit as the real need"
+                }
+              }
+            },
+            {
+              "rubric_id": "E09-verdict-card-mismatch-and-gap-A03",
+              "content": {
+                "property": {
+                  "description": "does not silently answer only the literal connectivity question while ignoring the mismatch"
+                }
+              }
+            },
+            {
+              "rubric_id": "E09-verdict-card-mismatch-and-gap-A04",
+              "content": {
+                "property": {
+                  "description": "does not ask permission before the Gap Report logging already performed by the tool call"
+                }
+              }
+            },
+            {
+              "rubric_id": "E09-verdict-card-mismatch-and-gap-A05",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

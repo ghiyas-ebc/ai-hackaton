@@ -90,3 +90,17 @@ Built-in telemetry exports to Cloud Trace, BigQuery, and Cloud Logging.
 
 This agent supports the [A2A Protocol](https://a2a-protocol.org/). Use the [A2A Inspector](https://github.com/a2aproject/a2a-inspector) to test interoperability.
 See the [A2A Inspector docs](https://github.com/a2aproject/a2a-inspector) for details.
+
+### Evaluation workflow
+
+Run from `cloud-arch-validator-agent/` after loading `.env`:
+
+```bash
+python tests/eval/validate_dataset.py
+agents-cli eval generate --dataset tests/eval/datasets/architecture-validator-dataset.json --output artifacts/traces/<run>/
+agents-cli eval grade --config tests/eval/eval_config.yaml --traces artifacts/traces/<run>/ --output artifacts/grades/<run>/
+agents-cli eval compare artifacts/grades/<baseline>.json artifacts/grades/<run>.json
+agents-cli eval analyze artifacts/grades/<run>.json
+```
+
+Dataset migration preserves nine source cases, Indonesian prompts, and per-case assertion rubrics. See `tests/eval/datasets/README.md`.
