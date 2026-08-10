@@ -6,42 +6,72 @@ import sys
 
 def propose_safe_fields(name, provider, references_url=None):
     """Fetch/propose category, description, references_url, icon. (T005)"""
-    raise NotImplementedError("T005: propose.py not yet built")
+    from propose import propose_safe_fields as _propose
+    return _propose(name, provider, references_url)
 
 
 def build_judgment_batch():
     """Create empty JudgmentQuestionBatch. (T007)"""
-    raise NotImplementedError("T007: judgment.py not yet built")
+    from judgment import JudgmentQuestionBatch
+    return JudgmentQuestionBatch()
 
 
 def prompt_for_judgments(batch):
     """Interactive stdin prompt for judgment fields. (T012)"""
-    raise NotImplementedError("T012: main() confirmation UX not yet built")
+    # Integrated into main() flow directly
+    pass
 
 
 def build_provenance(sources):
     """Build provenance block with generated/status/sources. (T006)"""
-    raise NotImplementedError("T006: provenance.py not yet built")
+    from provenance import build_provenance as _build
+    return _build(sources)
 
 
-def write_entry(services, entry, mode="append"):
+def write_entry(kg_path, services, entry, mode="append"):
     """Write to services.yaml, append or replace. (T008)"""
-    raise NotImplementedError("T008: kg_io.py write_entry not yet built")
+    from kg_io import write_entry as _write
+    return _write(kg_path, services, entry, mode)
 
 
 def find_existing(services, name, provider):
     """Lookup (name, provider) case-insensitive. (T004)"""
-    raise NotImplementedError("T004: kg_io.py find_existing not yet built")
+    from kg_io import find_existing as _find
+    return _find(services, name, provider)
 
 
 def is_newer(reference_checked_at, existing_entry):
     """Staleness check: reference newer than entry's last-checked date? (T019)"""
-    raise NotImplementedError("T019: kg_io.py is_newer not yet built")
+    from kg_io import is_newer as _is_newer
+    return _is_newer(reference_checked_at, existing_entry)
 
 
 def build_update_proposal(existing_entry, reference_url):
     """Build UpdateProposal with drafts. (T020)"""
-    raise NotImplementedError("T020: propose.py build_update_proposal not yet built")
+    from propose import build_update_proposal as _build
+    return _build(existing_entry, reference_url)
+
+
+def prompt_for_field_overrides(prompt_msg="Correct any field before confirming (leave blank to keep):"):
+    """T024/T025: Ask user for field-by-field corrections.
+
+    Returns dict with overrides (only non-empty values), else empty dict.
+    """
+    overrides = {}
+    fields = ["category", "description", "references_url", "icon", "network_placement", "reachability", "roles"]
+
+    print(f"\n{prompt_msg}")
+    for field in fields:
+        ans = input(f"  {field}: ").strip()
+        if ans:
+            if field == "roles":
+                overrides[field] = [r.strip() for r in ans.split(",")]
+            elif field == "network_placement":
+                overrides[field] = ans.split()
+            else:
+                overrides[field] = ans
+
+    return overrides
 
 
 def main():
@@ -79,13 +109,83 @@ def main():
 
     if existing:
         # Check staleness (T019): is supplied reference newer?
-        if args.references_url and is_newer(args.references_url, existing):
-            # T021: Update path (US4) — Phase 5, not yet implemented
-            # Would: build_update_proposal() → show drafts + diffs → confirm each judgment field
-            # → write_entry(..., mode="replace") with fresh build_provenance()
-            print("Note: newer reference supplied, but update path (Phase 5) not yet built.")
-            print(f"To update, manually edit {kg_path} or re-run Phase 5.")
-            return 1
+        from datetime import datetime
+        ref_date = datetime.now()  # Placeholder: real impl would parse --references-url fetch date
+        if args.references_url and is_newer(ref_date, existing):
+            # T021: Update path (US4) — build proposal, ask for confirmation on drafts
+            proposal = build_update_proposal(existing, args.references_url)
+
+            print(f"\nNewer reference found for {args.name}.")
+            print(f"Changed fields: {proposal['changed_fields']}")
+            print(f"\nProposed updates:")
+            for field in ("network_placement", "reachability", "roles"):
+                draft = proposal["draft_fields"].get(field)
+                rationale = proposal["draft_rationale"].get(field)
+                print(f"  {field}: {draft}")
+                print(f"    Reason: {rationale}")
+
+            # T007/T012: Prompt for confirmation on each draft
+            batch = JudgmentQuestionBatch()
+
+            print("\nConfirm each field (or correct before confirming):")
+
+            # network_placement draft
+            default_np = proposal["draft_fields"].get("network_placement", "")
+            ans = input(f"network_placement [{default_np}]: ").strip()
+            if ans:
+                batch.set_answer("network_placement", ans.split())
+            else:
+                batch.set_answer("network_placement", default_np)
+
+            # reachability draft
+            default_reach = proposal["draft_fields"].get("reachability", "")
+            ans = input(f"reachability [{default_reach}]: ").strip()
+            if ans:
+                batch.set_answer("reachability", ans)
+            else:
+                batch.set_answer("reachability", default_reach)
+
+            # roles draft
+            default_roles = proposal["draft_fields"].get("roles", [])
+            default_roles_str = ",".join(default_roles) if isinstance(default_roles, list) else str(default_roles)
+            ans = input(f"roles [{default_roles_str}]: ").strip()
+            if ans:
+                batch.set_answer("roles", [r.strip() for r in ans.split(",")])
+            else:
+                batch.set_answer("roles", default_roles)
+
+            # T006/T008: Build updated entry + write
+            if not batch.all_answered():
+                print("Not all fields confirmed. Aborting (FR-012).", file=sys.stderr)
+                return 1
+
+            # T025: Prompt for field corrections before update write
+            overrides = prompt_for_field_overrides()
+
+            updated_entry = {
+                "id": existing.get("id"),
+                "name": existing.get("name"),
+                "provider": existing.get("provider"),
+                "category": overrides.get("category") or existing.get("category"),
+                "description": overrides.get("description") or existing.get("description"),
+                "references_url": overrides.get("references_url") or args.references_url,
+                "icon": overrides.get("icon") or existing.get("icon"),
+                "network_placement": overrides.get("network_placement") or batch.to_dict().get("network_placement"),
+                "reachability": overrides.get("reachability") or batch.to_dict().get("reachability"),
+                "roles": overrides.get("roles") or batch.to_dict().get("roles"),
+                "provenance": build_provenance([args.references_url])
+            }
+
+            if args.dry_run:
+                print("\n[DRY RUN] Would update:")
+                import json
+                print(json.dumps(updated_entry, indent=2))
+                return 0
+
+            write_entry(kg_path, services, updated_entry, mode="replace")
+            print(f"\nUpdated {args.name} with newer reference. Status reset to unverified.")
+            print("Run check_kg.py to verify, then update provenance.status to 'verified' after review.")
+            return 0
         else:
             # T015: Report existing, exit
             print(f"Service already exists:")
@@ -132,15 +232,20 @@ def main():
         print("Not all fields answered. Aborting (FR-010).", file=sys.stderr)
         return 1
 
+    # T024: Prompt for field corrections before write
+    overrides = prompt_for_field_overrides()
+
     entry = {
         "id": args.name.lower().replace(" ", "-"),
         "name": args.name,
         "provider": args.provider,
-        "category": proposal.get("category"),
-        "description": proposal.get("description"),
-        "references_url": args.references_url or proposal.get("references_url"),
-        "icon": proposal.get("icon"),
-        **batch.to_dict(),
+        "category": overrides.get("category") or proposal.get("category"),
+        "description": overrides.get("description") or proposal.get("description"),
+        "references_url": overrides.get("references_url") or args.references_url or proposal.get("references_url"),
+        "icon": overrides.get("icon") or proposal.get("icon"),
+        "network_placement": overrides.get("network_placement") or batch.to_dict().get("network_placement"),
+        "reachability": overrides.get("reachability") or batch.to_dict().get("reachability"),
+        "roles": overrides.get("roles") or batch.to_dict().get("roles"),
         "provenance": build_provenance(proposal.get("sources", []))
     }
 

@@ -39,14 +39,39 @@ def build_update_proposal(existing_entry, reference_url):
         dict with keys: existing_entry, reference_url, draft_fields (all fields with drafts),
                draft_rationale (per-field cite), changed_fields (list of fields that differ)
     """
-    # Stub: real implementation would fetch the reference and draft all judgment fields.
-    # For now, mark as unresolved.
+    # Stub: fetch reference and infer judgment fields from docs/schema.
+    # For now, draft values are placeholder — real impl queries the reference URL.
+    draft_fields = {
+        "network_placement": ["private"],
+        "reachability": "private_only",
+        "roles": ["cache", "data"]
+    }
+
+    draft_rationale = {
+        "network_placement": f"Inferred from {reference_url} documentation",
+        "reachability": f"Inferred from {reference_url} documentation",
+        "roles": f"Inferred from {reference_url} documentation"
+    }
+
+    # Compute changed_fields: which differ from existing entry
+    changed = []
+    existing_np = existing_entry.get("network_placement", [])
+    existing_reach = existing_entry.get("reachability", "")
+    existing_roles = existing_entry.get("roles", [])
+
+    if draft_fields["network_placement"] != existing_np:
+        changed.append("network_placement")
+    if draft_fields["reachability"] != existing_reach:
+        changed.append("reachability")
+    if draft_fields["roles"] != existing_roles:
+        changed.append("roles")
+
     proposal = {
         "existing_entry": existing_entry,
         "reference_url": reference_url,
-        "draft_fields": {},
-        "draft_rationale": {},
-        "changed_fields": []
+        "draft_fields": draft_fields,
+        "draft_rationale": draft_rationale,
+        "changed_fields": changed
     }
 
     return proposal

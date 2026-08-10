@@ -129,6 +129,70 @@ class TestStalenessCheck:
         assert not is_newer(older_date, cloud_run)
 
 
+class TestUpdateProposal:
+    """T016: Staleness detection triggers update proposal with drafts."""
+
+    def test_newer_reference_triggers_update_proposal(self, tmp_services_yaml):
+        """Existing entry + newer reference → UpdateProposal with draft fields."""
+        from propose import build_update_proposal
+        from datetime import datetime
+
+        services = load_services(tmp_services_yaml)
+        cloud_run = find_existing(services, "Cloud Run", "gcp")
+
+        # Cloud Run verified 2026-08-01, reference from 2026-08-02 is newer
+        newer_ref = "https://example.com/updated-docs"
+        proposal = build_update_proposal(cloud_run, newer_ref)
+
+        # Proposal must have existing entry and draft fields
+        assert proposal["existing_entry"] == cloud_run
+        assert proposal["reference_url"] == newer_ref
+        # draft_fields populated (even if stub just empty dict for now)
+        assert isinstance(proposal["draft_fields"], dict)
+        assert isinstance(proposal["draft_rationale"], dict)
+        assert isinstance(proposal["changed_fields"], list)
+
+    def test_unconfirmed_draft_blocks_write_on_update(self, tmp_services_yaml):
+        """Drafts from update proposal don't write until explicitly confirmed per field."""
+        batch = JudgmentQuestionBatch()
+
+        # Simulate: update proposal sets drafts
+        batch.set_draft("network_placement", "private", "from newer docs")
+        batch.set_draft("reachability", "private_only", "from newer docs")
+        batch.set_draft("roles", ["data"], "from newer docs")
+
+        # all_answered must be False (drafts don't count)
+        assert not batch.all_answered()
+
+        # Confirm one field
+        batch.set_answer("network_placement", "private")
+
+        # Still False (other two are drafts)
+        assert not batch.all_answered()
+
+        # Confirm all
+        batch.set_answer("reachability", "private_only")
+        batch.set_answer("roles", ["data"])
+
+        # Now True
+        assert batch.all_answered()
+
+    def test_same_or_older_reference_does_not_trigger_update(self, tmp_services_yaml):
+        """Entry with verified date + same/older reference → no update proposal (FR-011)."""
+        from datetime import datetime
+
+        services = load_services(tmp_services_yaml)
+        cloud_run = find_existing(services, "Cloud Run", "gcp")
+
+        # Same date as verified
+        same_ref_date = datetime(2026, 8, 1)
+        assert not is_newer(same_ref_date, cloud_run)
+
+        # Older date
+        older_ref_date = datetime(2026, 7, 31)
+        assert not is_newer(older_ref_date, cloud_run)
+
+
 class TestJudgmentBatch:
     """T007: Batch gating."""
 
@@ -154,3 +218,82 @@ class TestJudgmentBatch:
         batch.set_answer("roles", ["compute"])
 
         assert not batch.all_answered()
+
+
+class TestCorrectionOnAdd:
+    """T022: Correct proposed fields before write on fresh add."""
+
+    def test_correction_overrides_proposed_field_on_add(self, tmp_services_yaml):
+        """Proposed category can be overridden before write."""
+        services = load_services(tmp_services_yaml)
+        initial_count = len(services.get("services", []))
+
+        # Simulate: proposal says "datastore", user corrects to "compute"
+        proposed_category = "datastore"
+        corrected_category = "compute"
+
+        # Entry built with correction (not proposal)
+        entry = {
+            "id": "custom-compute",
+            "name": "Custom Compute",
+            "provider": "gcp",
+            "category": corrected_category,  # Override
+            "description": "Custom compute service",
+            "references_url": "https://example.com",
+            "network_placement": ["public"],
+            "reachability": "public_or_private",
+            "roles": ["compute"],
+            "icon": "https://example.com/icon.svg",
+            "provenance": build_provenance(["https://example.com"])
+        }
+
+        write_entry(tmp_services_yaml, services, entry, mode="append")
+
+        # Verify correction wrote, not proposal
+        services_after = load_services(tmp_services_yaml)
+        new_entry = services_after["services"][-1]
+        assert new_entry["category"] == "compute"
+
+
+class TestCorrectionOnUpdate:
+    """T023: Correct draft fields before write on update."""
+
+    def test_correction_overrides_draft_field_on_update(self, tmp_services_yaml):
+        """Draft judgment field can be overridden before update write."""
+        services = load_services(tmp_services_yaml)
+
+        # Simulate: update proposal drafts roles as ["cache"], user corrects to ["storage"]
+        cloud_run = find_existing(services, "Cloud Run", "gcp")
+        proposal = {
+            "draft_fields": {
+                "network_placement": ["private"],
+                "reachability": "private_only",
+                "roles": ["cache"]  # Proposal draft
+            }
+        }
+
+        # User overrides draft roles
+        batch = JudgmentQuestionBatch()
+        batch.set_answer("network_placement", ["private"])
+        batch.set_answer("reachability", "private_only")
+        batch.set_answer("roles", ["storage"])  # Override
+
+        # Entry built with correction
+        updated = {
+            "id": cloud_run.get("id"),
+            "name": cloud_run.get("name"),
+            "provider": cloud_run.get("provider"),
+            "category": cloud_run.get("category"),
+            "description": cloud_run.get("description"),
+            "references_url": "https://newer-ref.com",
+            "icon": cloud_run.get("icon"),
+            **batch.to_dict(),
+            "provenance": build_provenance(["https://newer-ref.com"])
+        }
+
+        write_entry(tmp_services_yaml, services, updated, mode="replace")
+
+        # Verify correction wrote, not draft
+        services_after = load_services(tmp_services_yaml)
+        corrected = find_existing(services_after, "Cloud Run", "gcp")
+        assert corrected["roles"] == ["storage"]

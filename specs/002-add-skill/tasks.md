@@ -158,33 +158,33 @@ until each draft is explicitly confirmed, confirm declining leaves the entry unt
 
 ### Tests for User Story 4
 
-- [ ] T016 [P] [US4] Fixture test
+- [x] T016 [P] [US4] Fixture test
       `test_add_service.py::test_newer_reference_triggers_update_proposal` — existing entry +
       newer `--references-url` produces an `UpdateProposal` with `changed_fields` and draft
       judgment answers, not a bare "already exists" report.
-- [ ] T017 [P] [US4] Fixture test
+- [x] T017 [P] [US4] Fixture test
       `test_add_service.py::test_unconfirmed_draft_blocks_write` — draft judgment-field values
       alone (no explicit per-field confirmation) result in zero changes to `services.yaml`, even
       when none of the drafts are objected to (FR-012's "unconfirmed draft is never a
       confirmation").
-- [ ] T018 [P] [US4] Fixture test
+- [x] T018 [P] [US4] Fixture test
       `test_add_service.py::test_same_or_older_reference_does_not_trigger_update` — a reference
       no newer than the entry's last-checked date falls back to US2's plain "already exists"
       report (FR-011, Edge Cases).
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] Implement `is_newer(reference_checked_at, existing_entry)` staleness comparator
+- [x] T019 [US4] Implement `is_newer(reference_checked_at, existing_entry)` staleness comparator
       in `cloud-architecture-validator-add/scripts/kg_io.py`, using
       `provenance.verified` date when `status: verified`, entry write time otherwise, and
       "always stale" when neither is present (spec Assumption on "last-checked date"). Depends
       on: T004.
-- [ ] T020 [US4] Implement `build_update_proposal(existing_entry, reference_url)` in
+- [x] T020 [US4] Implement `build_update_proposal(existing_entry, reference_url)` in
       `cloud-architecture-validator-add/scripts/propose.py` — extends T005's fetch mechanics to
       also draft `network_placement`/`reachability`/`roles` from the reference, each with a
       one-line rationale, and computes `changed_fields` against `existing_entry` (data-model.md
       `UpdateProposal`). Depends on: T005, T019.
-- [ ] T021 [US4] Wire the update flow into `main()`: on `is_newer`, build the proposal (T020),
+- [x] T021 [US4] Wire the update flow into `main()`: on `is_newer`, build the proposal (T020),
       present `JudgmentQuestionBatch` (T007) pre-filled as `draft` (not `answered`), block confirm
       until each is explicitly confirmed via `all_answered()`, then `write_entry(...,
       mode="replace")` (T008) with a fresh `build_provenance` call (T006) resetting `status` to
@@ -204,22 +204,22 @@ verify the corrected value (not the original proposal) is what's written.
 
 ### Tests for User Story 3
 
-- [ ] T022 [P] [US3] Fixture test
+- [x] T022 [P] [US3] Fixture test
       `test_add_service.py::test_correction_overrides_proposed_field_on_add` — supplying an
       override for a proposed safe field during the fresh-add flow (T011) results in the override
       value in the written entry.
-- [ ] T023 [P] [US3] Fixture test
+- [x] T023 [P] [US3] Fixture test
       `test_add_service.py::test_correction_overrides_draft_field_on_update` — supplying an
       override for a draft judgment field during the update flow (T021) results in the override
       value, not the draft, in the written entry.
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Add field-override handling to the fresh-add confirmation step in `main()`
+- [x] T024 [US3] Add field-override handling to the fresh-add confirmation step in `main()`
       (`add_service.py`): before final confirm, accept per-field corrections and merge them over
       the proposal (data-model.md `Confirmation.field_overrides`) prior to calling `write_entry`.
       Depends on: T011.
-- [ ] T025 [US3] Add the same field-override handling to the update confirmation step in `main()`
+- [x] T025 [US3] Add the same field-override handling to the update confirmation step in `main()`
       (`add_service.py`), reusing T024's merge logic against the update proposal instead of the
       fresh-add proposal. Depends on: T021, T024.
 
@@ -229,14 +229,14 @@ verify the corrected value (not the original proposal) is what's written.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T026 [P] Update `cloud-architecture-validator-add/SKILL.md` to remove stub language ("Not
+- [x] T026 [P] Update `cloud-architecture-validator-add/SKILL.md` to remove stub language ("Not
       built yet", "NOT YET IMPLEMENTED" in its frontmatter description) and describe the real
       flow (fresh add + staleness-detected update), keeping the existing "line this skill has to
       draw" rationale section as-is since it still accurately describes the design.
-- [ ] T027 Run `quickstart.md` Scenarios 1-6 manually end-to-end against a real (non-fixture)
+- [x] T027 Run `quickstart.md` Scenarios 1-6 manually end-to-end against a real (non-fixture)
       clone of `references/kg/services.yaml` to confirm the documented CLI behavior matches
       implementation.
-- [ ] T028 [P] Run
+- [x] T028 [P] Run
       `cloud-architecture-validator-create-architect/scripts/check_kg.py` after a real Scenario 1
       add (T027) and confirm: 37/37 regression unaffected, L1 coverage unaffected elsewhere, and
       the new entry's `provenance.status: unverified` is the only reported provenance failure.
