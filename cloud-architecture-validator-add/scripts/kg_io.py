@@ -1,6 +1,5 @@
 """Load/write/lookup for services.yaml. (T003, T004, T008, T019)"""
 
-import yaml
 from pathlib import Path
 from datetime import datetime
 
@@ -10,6 +9,7 @@ def load_services(yaml_path):
 
     T003: Round-trip load for append/replace.
     """
+    import yaml
     with open(yaml_path) as f:
         return yaml.safe_load(f) or {"services": []}
 
@@ -19,6 +19,7 @@ def write_services(yaml_path, services_dict):
 
     T003: Round-trip write after append/replace.
     """
+    import yaml
     with open(yaml_path, "w") as f:
         yaml.dump(services_dict, f, default_flow_style=False, sort_keys=False)
 
