@@ -78,18 +78,18 @@ This skill must never write `status: verified` itself, and never write `status: 
 
 ## Equivalence Detection (Fresh-Add & Update)
 
-During fresh-add, after judgment fields confirmed: user is prompted whether service has a cross-provider equivalent. Agent proposes (e.g., "Cloud Run → Container Instances"). User can accept/correct/decline. If confirmed, system outputs recommendation block (YAML + metadata) for manual `equivalences.yaml` edit.
+During fresh-add, after judgment fields confirmed: user is prompted whether service has a cross-provider equivalent. Agent proposes (e.g., "Cloud Run → Container Instances"). User can accept/correct/decline. If confirmed, user is asked: "Apply equivalence to KG?" (y/n). On yes: system auto-writes to `equivalences.yaml` with provenance block (status: unverified, requires engineer review before verified).
 
-During update with newer reference: system checks reference text for competitor product mentions. If found (e.g., "Agent Platform"), triggers same equivalence proposal flow.
+During update with newer reference: system checks reference text for competitor product mentions. If found (e.g., "Agent Platform"), triggers same equivalence proposal flow + optional auto-write.
 
-**Key guarantee**: Equivalence detection never auto-writes to `equivalences.yaml`. Recommendation-only — user manually edits file + engineer reviews before KG ingestion.
+**Key guarantee**: All writes are human-gated. User must explicitly confirm both the equivalence match AND the write ("Apply to KG?") before `equivalences.yaml` is modified. Principle III (Human Gate) preserved.
 
 ## Before using in production
 
-1. Run `quickstart.md` scenarios 1-6 manually to confirm CLI behavior (fresh-add, update, equivalence prompts)
+1. Run `quickstart.md` scenarios 1-6 manually to confirm CLI behavior (fresh-add, update, equivalence prompts + writes)
 2. Run `check_kg.py` after a real add to verify:
    - 37/37 regression unaffected
    - L1 coverage unaffected elsewhere
    - New entry's `provenance.status: unverified` is the only reported provenance failure
-3. Flip entry to `status: verified` after human review
-4. If equivalence recommendation output, manually edit `references/kg/equivalences.yaml` + verify with `translate.py`
+3. Flip both service entry and equivalence entry to `status: verified` after human review
+4. Run `translate.py` to verify equivalence mappings work end-to-end

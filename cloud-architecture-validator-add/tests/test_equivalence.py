@@ -59,6 +59,39 @@ class TestEquivalenceRecommendationFormat:
         assert "azure:" in recommendation
         assert "```yaml" in recommendation
 
+    def test_write_equivalence_to_kg(self, tmp_path):
+        """Option 2: write_equivalence auto-writes with provenance."""
+        from equivalence import write_equivalence
+        import yaml
+
+        tmp_equiv = tmp_path / "equivalences.yaml"
+        tmp_equiv.write_text("equivalences: []\n")
+
+        proposal = EquivalenceProposal(
+            provider_from="gcp",
+            service_name_from="Cloud Run",
+            provider_to="azure",
+            service_name_to="Container Instances",
+            confidence="certain",
+            rationale="Both serverless container platforms",
+            sources=["https://cloud.google.com/run/docs"]
+        )
+
+        success = write_equivalence(str(tmp_equiv), proposal, "Container Instances")
+        assert success
+
+        # Verify file contains entry + provenance
+        with open(tmp_equiv) as f:
+            data = yaml.safe_load(f)
+
+        assert len(data["equivalences"]) == 1
+        entry = data["equivalences"][0]
+        assert entry["gcp"] == "Cloud Run"
+        assert entry["azure"] == "Container Instances"
+        assert entry["provenance"]["generated"] == "cloud-architecture-validator-add"
+        assert entry["provenance"]["status"] == "unverified"
+        assert entry["provenance"]["confidence"] == "certain"
+
 
 class TestExistingEquivalenceDetection:
     """T010: Existing mapping blocks proposal."""

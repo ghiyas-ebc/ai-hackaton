@@ -74,22 +74,26 @@ def prompt_for_field_overrides(prompt_msg="Correct any field before confirming (
     return overrides
 
 
-def prompt_for_equivalence(service_name, provider):
+def prompt_for_equivalence(service_name, provider, kg_path=None):
     """T012: Prompt user for equivalence detection (fresh-add).
 
-    Returns: EquivalenceProposal (confirmed/corrected) or None if declined
+    Option 2: If user confirms, offer to auto-write to equivalences.yaml.
+    Still human-gated (user must click "Apply to KG").
+
+    Returns: (EquivalenceProposal, was_written) or (None, False) if declined
     """
-    from equivalence import propose_equivalence, format_recommendation
+    from equivalence import propose_equivalence, format_recommendation, write_equivalence
+    from pathlib import Path
 
     print(f"\nDoes {service_name} have an equivalent in other cloud providers?")
     ans = input("Check for equivalence? (y/n): ").strip().lower()
     if ans != "y":
-        return None
+        return None, False
 
     # Agent proposes (stub for now)
     proposal = propose_equivalence(service_name, provider, [], None)
     if not proposal:
-        return None
+        return None, False
 
     print(f"\nProposed equivalent:")
     print(f"  {proposal.provider_from}: {proposal.service_name_from}")
@@ -99,19 +103,32 @@ def prompt_for_equivalence(service_name, provider):
     # User confirm/correct/decline
     choice = input("Accept proposal, correct, or decline? (accept/correct/decline): ").strip().lower()
     if choice == "decline":
-        return None
+        return None, False
 
     confirmed_name = proposal.service_name_to
     if choice == "correct":
         confirmed_name = input("Enter corrected target service name: ").strip()
         if not confirmed_name:
-            return None
+            return None, False
 
-    # Output recommendation
+    # Option 2: Offer to auto-write to KG
+    if kg_path:
+        apply = input("\nApply this equivalence to the KG? (y/n): ").strip().lower()
+        if apply == "y":
+            equiv_path = Path(kg_path).parent.parent / "cloud-architecture-validator-create-architect" / "references" / "kg" / "equivalences.yaml"
+            if write_equivalence(str(equiv_path), proposal, confirmed_name):
+                print(f"\n✓ Equivalence written to KG (status: unverified).")
+                print(f"Run check_kg.py to verify, then update provenance.status to 'verified' after review.")
+                return proposal, True
+            else:
+                print(f"\n✗ Failed to write equivalence. Check file permissions.")
+                return proposal, False
+
+    # Fallback: Output recommendation for manual edit
     recommendation = format_recommendation(proposal, confirmed_name)
     print(recommendation)
 
-    return proposal
+    return proposal, False
 
 
 def main():
@@ -200,7 +217,8 @@ def main():
                 return 1
 
             # T018/T019/US2: Check for competitor mentions in reference + offer equivalence detection
-            from equivalence import detect_competitor_mention, propose_equivalence, format_recommendation
+            from equivalence import detect_competitor_mention, propose_equivalence, write_equivalence
+            from pathlib import Path
             mention = detect_competitor_mention(proposal["reference_url"])  # T017: detect
             if mention:
                 print(f"\nReference mentions competitor: {mention}")
@@ -213,8 +231,14 @@ def main():
                         if choice == "correct":
                             confirmed_name = input("Enter corrected name: ").strip()
                         if confirmed_name:
-                            recommendation = format_recommendation(eq_proposal, confirmed_name)
-                            print(recommendation)
+                            # Option 2: Offer auto-write
+                            apply = input("Apply equivalence to KG? (y/n): ").strip().lower()
+                            if apply == "y":
+                                equiv_path = Path(kg_path).parent.parent / "cloud-architecture-validator-create-architect" / "references" / "kg" / "equivalences.yaml"
+                                if write_equivalence(str(equiv_path), eq_proposal, confirmed_name):
+                                    print(f"✓ Equivalence written to KG (status: unverified).")
+                                else:
+                                    print(f"✗ Failed to write equivalence.")
 
             # T025: Prompt for field corrections before update write
             overrides = prompt_for_field_overrides()
@@ -290,7 +314,7 @@ def main():
         return 1
 
     # T013/US1: Prompt for equivalence after judgment fields (fresh-add)
-    prompt_for_equivalence(args.name, args.provider)
+    prompt_for_equivalence(args.name, args.provider, str(kg_path))
 
     # T024: Prompt for field corrections before write
     overrides = prompt_for_field_overrides()

@@ -149,3 +149,49 @@ def detect_competitor_mention(reference_text: str) -> Optional[str]:
             return competitor_name
 
     return None
+
+
+def write_equivalence(yaml_path: str, proposal: EquivalenceProposal, confirmed_name: str) -> bool:
+    """Write confirmed equivalence to equivalences.yaml with provenance.
+
+    Option 2: Auto-write on user confirmation (no manual YAML edit needed).
+    Principle III (Human Gate) still applies: user confirmed before this runs.
+
+    Args:
+      yaml_path: Path to equivalences.yaml in sibling skill
+      proposal: EquivalenceProposal from agent
+      confirmed_name: User-confirmed target service name
+
+    Returns:
+      bool: True if write succeeded
+    """
+    from datetime import datetime
+
+    equivalences = load_equivalences(yaml_path)
+
+    entry = {
+        proposal.provider_from: proposal.service_name_from,
+        proposal.provider_to: confirmed_name,
+        "provenance": {
+            "generated": "cloud-architecture-validator-add",
+            "status": "unverified",
+            "verified": None,
+            "sources": proposal.sources,
+            "proposed_on": datetime.now().isoformat(),
+            "confidence": proposal.confidence,
+            "rationale": proposal.rationale
+        }
+    }
+
+    if "equivalences" not in equivalences:
+        equivalences["equivalences"] = []
+
+    equivalences["equivalences"].append(entry)
+
+    try:
+        with open(yaml_path, "w") as f:
+            yaml.dump(equivalences, f, default_flow_style=False, sort_keys=False)
+        return True
+    except Exception as e:
+        print(f"Error writing equivalences.yaml: {e}")
+        return False
