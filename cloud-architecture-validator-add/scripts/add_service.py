@@ -74,6 +74,46 @@ def prompt_for_field_overrides(prompt_msg="Correct any field before confirming (
     return overrides
 
 
+def prompt_for_equivalence(service_name, provider):
+    """T012: Prompt user for equivalence detection (fresh-add).
+
+    Returns: EquivalenceProposal (confirmed/corrected) or None if declined
+    """
+    from equivalence import propose_equivalence, format_recommendation
+
+    print(f"\nDoes {service_name} have an equivalent in other cloud providers?")
+    ans = input("Check for equivalence? (y/n): ").strip().lower()
+    if ans != "y":
+        return None
+
+    # Agent proposes (stub for now)
+    proposal = propose_equivalence(service_name, provider, [], None)
+    if not proposal:
+        return None
+
+    print(f"\nProposed equivalent:")
+    print(f"  {proposal.provider_from}: {proposal.service_name_from}")
+    print(f"  {proposal.provider_to}: {proposal.service_name_to}")
+    print(f"  Confidence: {proposal.confidence}")
+
+    # User confirm/correct/decline
+    choice = input("Accept proposal, correct, or decline? (accept/correct/decline): ").strip().lower()
+    if choice == "decline":
+        return None
+
+    confirmed_name = proposal.service_name_to
+    if choice == "correct":
+        confirmed_name = input("Enter corrected target service name: ").strip()
+        if not confirmed_name:
+            return None
+
+    # Output recommendation
+    recommendation = format_recommendation(proposal, confirmed_name)
+    print(recommendation)
+
+    return proposal
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Add or update a cloud service in the KG with human-gated judgment fields."
@@ -159,6 +199,23 @@ def main():
                 print("Not all fields confirmed. Aborting (FR-012).", file=sys.stderr)
                 return 1
 
+            # T018/T019/US2: Check for competitor mentions in reference + offer equivalence detection
+            from equivalence import detect_competitor_mention, propose_equivalence, format_recommendation
+            mention = detect_competitor_mention(proposal["reference_url"])  # T017: detect
+            if mention:
+                print(f"\nReference mentions competitor: {mention}")
+                eq_proposal = propose_equivalence(args.name, args.provider, [], args.references_url)
+                if eq_proposal:
+                    print(f"Proposed equivalent: {eq_proposal.service_name_to}")
+                    choice = input("Accept, correct, or decline equivalence? (accept/correct/decline): ").strip().lower()
+                    if choice != "decline":
+                        confirmed_name = eq_proposal.service_name_to
+                        if choice == "correct":
+                            confirmed_name = input("Enter corrected name: ").strip()
+                        if confirmed_name:
+                            recommendation = format_recommendation(eq_proposal, confirmed_name)
+                            print(recommendation)
+
             # T025: Prompt for field corrections before update write
             overrides = prompt_for_field_overrides()
 
@@ -231,6 +288,9 @@ def main():
     if not batch.all_answered():
         print("Not all fields answered. Aborting (FR-010).", file=sys.stderr)
         return 1
+
+    # T013/US1: Prompt for equivalence after judgment fields (fresh-add)
+    prompt_for_equivalence(args.name, args.provider)
 
     # T024: Prompt for field corrections before write
     overrides = prompt_for_field_overrides()

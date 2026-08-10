@@ -21,9 +21,9 @@ description: "Task list for Equivalence Detection feature"
 
 **Purpose**: Create module structure, test skeleton, base imports.
 
-- [ ] T001 Create `cloud-architecture-validator-add/scripts/equivalence.py` (empty module, docstrings only)
-- [ ] T002 Create `cloud-architecture-validator-add/tests/test_equivalence.py` with imports + fixture references
-- [ ] T003 Create test fixture in conftest.py for equivalences.yaml (load from sibling KG or mock)
+- [x] T001 Create `cloud-architecture-validator-add/scripts/equivalence.py` (empty module, docstrings only)
+- [x] T002 Create `cloud-architecture-validator-add/tests/test_equivalence.py` with imports + fixture references
+- [x] T003 Create test fixture in conftest.py for equivalences.yaml (load from sibling KG or mock)
 
 ---
 
@@ -31,10 +31,10 @@ description: "Task list for Equivalence Detection feature"
 
 **Purpose**: Shared helpers, existing-mapping detection, recommendation formatter.
 
-- [ ] T004 [P] Implement `load_equivalences(yaml_path)` in equivalence.py — read equivalences.yaml from sibling skill
-- [ ] T005 [P] Implement `find_existing_equivalence(provider_from, service_name_from, equivalences)` — case-insensitive (provider, name) lookup
-- [ ] T006 [P] Implement `format_recommendation(proposal, confirmed_name)` in equivalence.py — return copy-paste-ready YAML block + metadata
-- [ ] T007 Implement `EquivalenceProposal` dataclass in equivalence.py (fields: provider_from, service_name_from, provider_to, service_name_to, confidence, rationale, sources)
+- [x] T004 [P] Implement `load_equivalences(yaml_path)` in equivalence.py — read equivalences.yaml from sibling skill
+- [x] T005 [P] Implement `find_existing_equivalence(provider_from, service_name_from, equivalences)` — case-insensitive (provider, name) lookup
+- [x] T006 [P] Implement `format_recommendation(proposal, confirmed_name)` in equivalence.py — return copy-paste-ready YAML block + metadata
+- [x] T007 Implement `EquivalenceProposal` dataclass in equivalence.py (fields: provider_from, service_name_from, provider_to, service_name_to, confidence, rationale, sources)
 
 **Checkpoint**: Foundation ready — user story implementation can now begin.
 
@@ -48,15 +48,15 @@ description: "Task list for Equivalence Detection feature"
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Test `test_equivalence_proposal_from_service_metadata` — given service category + description, agent proposes equiv name + confidence
-- [ ] T009 [P] [US1] Test `test_equivalence_recommendation_format` — confirmed proposal outputs valid YAML block (copy-paste ready)
-- [ ] T010 [P] [US1] Test `test_equivalence_exists_blocks_proposal` — service with existing mapping shows "already mapped" instead of proposal
+- [x] T008 [P] [US1] Test `test_equivalence_proposal_from_service_metadata` — given service category + description, agent proposes equiv name + confidence
+- [x] T009 [P] [US1] Test `test_equivalence_recommendation_format` — confirmed proposal outputs valid YAML block (copy-paste ready)
+- [x] T010 [P] [US1] Test `test_equivalence_exists_blocks_proposal` — service with existing mapping shows "already mapped" instead of proposal
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement `propose_equivalence(service_name, provider_from, categories, references_url)` in equivalence.py — agent-based proposal (category + description → Azure equivalent)
-- [ ] T012 [US1] Wire equivalence prompt into `add_service.py` main() after judgment fields confirmed (before write): "Does [service] have an equivalent in [other provider]?"
-- [ ] T013 [US1] Wire user confirmation prompt (accept/correct/decline) + call `format_recommendation()` on confirmation
+- [x] T011 [US1] Implement `propose_equivalence(service_name, provider_from, categories, references_url)` in equivalence.py — agent-based proposal (category + description → Azure equivalent)
+- [x] T012 [US1] Wire equivalence prompt into `add_service.py` main() after judgment fields confirmed (before write): "Does [service] have an equivalent in [other provider]?"
+- [x] T013 [US1] Wire user confirmation prompt (accept/correct/decline) + call `format_recommendation()` on confirmation
 
 **Checkpoint**: User Story 1 fully functional — equivalence detection on fresh-add works end-to-end.
 
@@ -70,15 +70,15 @@ description: "Task list for Equivalence Detection feature"
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Test `test_competitor_mention_detected` — reference text containing "Agent Platform" triggers proposal for Azure equiv
-- [ ] T015 [P] [US2] Test `test_no_competitor_mention_skips_detection` — reference without mentions skips equivalence prompt
-- [ ] T016 [P] [US2] Test `test_equivalence_proposal_on_update` — update flow shows equivalence prompt with draft confirmation gate
+- [x] T014 [P] [US2] Test `test_competitor_mention_detected` — reference text containing "Agent Platform" triggers proposal for Azure equiv
+- [x] T015 [P] [US2] Test `test_no_competitor_mention_skips_detection` — reference without mentions skips equivalence prompt
+- [x] T016 [P] [US2] Test `test_equivalence_proposal_on_update` — update flow shows equivalence prompt with draft confirmation gate
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement `detect_competitor_mention(reference_text)` in equivalence.py — search for known competitor product names (Agent Platform, etc.)
-- [ ] T018 [US2] Wire equivalence detection into `add_service.py` update path: after newer reference confirmed, check reference docs for competitor mentions
-- [ ] T019 [US2] Wire confirmation prompt into update flow (reuse T013 logic): user confirms/corrects/declines equivalence, calls `format_recommendation()`
+- [x] T017 [US2] Implement `detect_competitor_mention(reference_text)` in equivalence.py — search for known competitor product names (Agent Platform, etc.)
+- [x] T018 [US2] Wire equivalence detection into `add_service.py` update path: after newer reference confirmed, check reference docs for competitor mentions
+- [x] T019 [US2] Wire confirmation prompt into update flow (reuse T013 logic): user confirms/corrects/declines equivalence, calls `format_recommendation()`
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
@@ -86,9 +86,9 @@ description: "Task list for Equivalence Detection feature"
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T020 Update `SKILL.md` in cloud-architecture-validator-add: document equivalence detection feature in fresh-add + update flows
-- [ ] T021 Run manual quickstart scenarios 1-3 from plan.md: fresh-add with equiv, fresh-add without equiv, update with competitor mention
-- [ ] T022 Verify no writes to equivalences.yaml (output-only); confirm recommendation blocks are copy-paste ready
+- [x] T020 Update `SKILL.md` in cloud-architecture-validator-add: document equivalence detection feature in fresh-add + update flows
+- [x] T021 Run manual quickstart scenarios 1-3 from plan.md: fresh-add with equiv, fresh-add without equiv, update with competitor mention
+- [x] T022 Verify no writes to equivalences.yaml (output-only); confirm recommendation blocks are copy-paste ready
 
 ---
 

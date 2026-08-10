@@ -43,8 +43,10 @@ python3 scripts/add_service.py --name "Service Name" --provider gcp [--reference
 3. If duplicate found + reference newer than entry's `provenance.verified` date:
    - Proposes update with draft answers for all three judgment fields
    - Shows differences from current entry
+   - **Equivalence detection** (US2): Searches reference text for competitor mentions; if found, proposes equivalent service
 4. User confirms each draft (or corrects before confirming)
-5. Entry updated in place with `provenance.status: unverified` (reset from prior)
+5. If equivalence proposal shown, user accepts/corrects/declines (outputs recommendation for manual edit)
+6. Entry updated in place with `provenance.status: unverified` (reset from prior)
 
 ### Duplicate Prevention
 
@@ -74,11 +76,20 @@ Every entry this skill writes carries a `provenance` block (root CLAUDE.md D21).
 
 This skill must never write `status: verified` itself, and never write `status: manual` — `manual` means a person hand-wrote the entry with no agent in the loop, which is by definition not what happened here.
 
+## Equivalence Detection (Fresh-Add & Update)
+
+During fresh-add, after judgment fields confirmed: user is prompted whether service has a cross-provider equivalent. Agent proposes (e.g., "Cloud Run → Container Instances"). User can accept/correct/decline. If confirmed, system outputs recommendation block (YAML + metadata) for manual `equivalences.yaml` edit.
+
+During update with newer reference: system checks reference text for competitor product mentions. If found (e.g., "Agent Platform"), triggers same equivalence proposal flow.
+
+**Key guarantee**: Equivalence detection never auto-writes to `equivalences.yaml`. Recommendation-only — user manually edits file + engineer reviews before KG ingestion.
+
 ## Before using in production
 
-1. Run `quickstart.md` scenarios 1-6 manually to confirm CLI behavior
+1. Run `quickstart.md` scenarios 1-6 manually to confirm CLI behavior (fresh-add, update, equivalence prompts)
 2. Run `check_kg.py` after a real add to verify:
    - 37/37 regression unaffected
    - L1 coverage unaffected elsewhere
    - New entry's `provenance.status: unverified` is the only reported provenance failure
 3. Flip entry to `status: verified` after human review
+4. If equivalence recommendation output, manually edit `references/kg/equivalences.yaml` + verify with `translate.py`
