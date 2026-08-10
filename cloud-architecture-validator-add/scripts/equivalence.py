@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Any
-import yaml
 
 
 @dataclass
@@ -33,6 +32,7 @@ def load_equivalences(yaml_path):
     Returns:
       dict: {equivalences: [...]} or empty if file missing
     """
+    import yaml
     try:
         with open(yaml_path) as f:
             return yaml.safe_load(f) or {"equivalences": []}
@@ -166,6 +166,7 @@ def write_equivalence(yaml_path: str, proposal: EquivalenceProposal, confirmed_n
       bool: True if write succeeded
     """
     from datetime import datetime
+    import yaml
 
     equivalences = load_equivalences(yaml_path)
 
