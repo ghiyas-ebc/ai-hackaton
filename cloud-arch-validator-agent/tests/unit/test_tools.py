@@ -70,12 +70,12 @@ def test_export_graph_can_be_filtered_by_provider() -> None:
     assert all(n["provider"] == "gcp" for n in gcp["nodes"])
 
 
-def test_drawio_output_is_wellformed_xml() -> None:
-    import xml.etree.ElementTree as ET
-
-    result = tools.render_drawio_diagram("cloud-run>cloud-sql")
-    assert result["format"] == "drawio-xml"
-    assert ET.fromstring(result["xml"]).tag == "mxfile"
+def test_terminal_renderer_contract_and_drawio_is_not_agent_exposed() -> None:
+    result = tools.render_ascii_diagram("cloud-run>cloud-sql", ascii_only=True)
+    assert result["format"] == "terminal"
+    assert result["diagram"].isascii()
+    assert tools.render_ascii_diagram in tools.ALL_TOOLS
+    assert tools.render_drawio_diagram not in tools.ALL_TOOLS
 
 
 def test_kg_health_gate_passes() -> None:
@@ -85,8 +85,56 @@ def test_kg_health_gate_passes() -> None:
     assert "[!]" not in report
 
 
-def test_stubs_report_not_implemented_rather_than_pretending() -> None:
-    for result in (tools.add_service_to_kg("Foo", "gcp"),
-                   tools.init_kg_from_catalog()):
-        assert result["implemented"] is False
-        assert "design stub" in result["message"]
+def test_add_service_rejects_missing_judgment_field(monkeypatch) -> None:
+    def fail_write(*args, **kwargs):
+        raise AssertionError("missing judgment fields must not write")
+
+    monkeypatch.setattr(tools, "_KG", tools._KG)
+    assert tools.add_service_to_kg("Foo", "gcp", "public", "", ["compute"])["error"] == "missing_field"
+
+
+def test_add_service_reports_existing(monkeypatch) -> None:
+    existing = {"name": "Foo", "provider": "gcp", "id": "foo"}
+    monkeypatch.setattr("kg_io.load_services", lambda path: {"services": [existing]})
+    result = tools.add_service_to_kg("Foo", "gcp", "public", "public_only", ["compute"])
+    assert result == {"written": False, "existing": existing}
+
+
+def test_add_service_writes_unverified_entry(monkeypatch) -> None:
+    written = {}
+    monkeypatch.setattr("kg_io.load_services", lambda path: {"services": []})
+    monkeypatch.setattr("kg_io.write_entry", lambda path, services, entry, mode: written.update(entry))
+    monkeypatch.setattr("propose.propose_safe_fields", lambda *args: {
+        "category": "compute", "description": "desc", "icon": None,
+        "references_url": args[2], "sources": [args[2]],
+    })
+    result = tools.add_service_to_kg("Foo", "gcp", "public", "public_only", ["compute"], "https://example.test")
+    assert result["written"] is True
+    assert result["entry"]["provenance"]["status"] == "unverified"
+    assert written["name"] == "Foo"
+
+
+def test_propose_equivalence_returns_recorded_mapping() -> None:
+    result = tools.propose_equivalence("cloud-run", "gcp")
+    assert result["status"] == "found"
+
+
+def test_propose_equivalence_marks_connectors_not_applicable() -> None:
+    result = tools.propose_equivalence("serverless-vpc-access", "gcp")
+    assert result["status"] == "not_applicable"
+
+
+def test_propose_equivalence_does_not_guess() -> None:
+    result = tools.propose_equivalence("unknown-service", "gcp")
+    assert result == {"status": "unknown", "message": "no known equivalent yet"}
+
+
+def test_init_stub_remains_explicit() -> None:
+    result = tools.init_kg_from_catalog()
+    assert result["implemented"] is False
+    assert "design stub" in result["message"]
+
+
+def test_all_tools_exposes_new_functions() -> None:
+    assert tools.add_service_to_kg in tools.ALL_TOOLS
+    assert tools.propose_equivalence in tools.ALL_TOOLS

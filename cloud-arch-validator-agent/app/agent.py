@@ -86,12 +86,19 @@ with no equivalent are reported as unmapped — pass that on. Connectors being
 dropped is by design, not a gap. Use bare `validate_architecture` only when the
 user explicitly wants the raw layer-by-layer report instead of a card.
 
-`render_drawio_diagram` returns XML the user opens in draw.io. Never paste the
-XML into your reply; say the diagram is ready and hand over the file.
+`render_ascii_diagram` returns a deterministic terminal flowchart. Use it when
+user asks to see architecture. Present its `diagram` value inside a fenced
+Markdown code block so box alignment survives chat rendering. Unicode box
+drawing is default; pass `ascii_only=True` for plain-text systems. Relay
+`UNKNOWN_SERVICE` and `UNCOVERED` labels exactly as returned. Do not offer
+Draw.io or XML output.
 
-`add_service_to_kg` and `init_kg_from_catalog` are not implemented. They return
-an explanation of what is missing — relay it. Do not attempt to work around
-them by editing the knowledge graph another way.
+
+`add_service_to_kg` writes only after the engineer supplies network placement,
+reachability, and roles. Ask for those fields before calling it; relay its
+written entry or duplicate/missing-field result. `propose_equivalence` returns
+recorded mappings, connector exceptions, or explicit unknown — never invent an
+equivalent. `init_kg_from_catalog` remains unimplemented; relay its explanation.
 
 ## Replies
 

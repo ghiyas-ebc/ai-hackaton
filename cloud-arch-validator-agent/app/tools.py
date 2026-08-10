@@ -14,7 +14,12 @@ from pathlib import Path
 # directory has to be on sys.path before they are imported. This is a statement
 # rather than `from . import kg_lib` on purpose: isort would hoist that import
 # above the ones it enables, and the failure would only show at runtime.
-sys.path.insert(0, str(Path(__file__).resolve().parent / "kg_lib"))
+_APP_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_APP_DIR / "kg_lib"))
+# Add-service helpers are kept in sibling skill scripts. Import them lazily below
+# so agent startup stays independent of authoring-only dependencies.
+_ADD_SCRIPTS_DIR = _APP_DIR.parent.parent / "cloud-architecture-validator-add" / "scripts"
+sys.path.insert(0, str(_ADD_SCRIPTS_DIR))
 
 import check_kg as check_kg_module
 import emit_drawio as emit_drawio_module
@@ -23,6 +28,8 @@ import kg as kg_module
 import translate as translate_module
 import validate as validate_module
 import verdict_card as verdict_card_module
+
+from app.renderer import render_report
 
 # The KG is ~46 KB of YAML across six files and never changes at runtime
 # (nothing in the validate path writes to it), so load it once per process.
@@ -266,6 +273,31 @@ def render_drawio_diagram(edges: str, environment: str = "poc") -> dict:
     return {"format": "drawio-xml", "xml": xml}
 
 
+def render_ascii_diagram(
+    edges: str,
+    environment: str = "poc",
+    ascii_only: bool = False,
+    width: int = 100,
+) -> dict:
+    """Render validated architecture as deterministic terminal text.
+
+    Rendering formats rule-engine output only. It never infers validity, severity,
+    service equivalence, or missing graph elements.
+    """
+    parsed = _parse_edges(edges)
+    report = validate_module.validate(parsed, context={"environment": environment}, kg=_KG)
+    diagram = render_report(report, _KG, width=width, ascii_only=ascii_only)
+    return {
+        "format": "terminal",
+        "ascii_only": ascii_only,
+        "width": width,
+        "diagram": diagram,
+        "node_count": report["summary"]["nodes"],
+        "edge_count": report["summary"]["edges"],
+        "finding_count": len(report["architecture"]),
+    }
+
+
 def check_kg_health() -> dict:
     """Run the knowledge graph's own integrity, provenance, and regression gate.
 
@@ -285,20 +317,6 @@ def check_kg_health() -> dict:
     return {"report": buf.getvalue()}
 
 
-_ADD_STUB = (
-    "cloud-architecture-validator-add is a design stub, not a working tool. "
-    "Nothing was validated or written to services.yaml.\n\n"
-    "What is missing: the split between agent-verifiable fields (name, "
-    "category, description, references_url, icon) and human-gated fields "
-    "(network_placement, reachability, roles) has been designed but not "
-    "built. Those three fields cannot be read off a provider schema, and a "
-    "wrong reachability value fails silently across roughly twenty service "
-    "pairs while check_kg.py still reports clean — it verifies structural "
-    "consistency, not semantic truth.\n\n"
-    "To add a service today, edit references/kg/services.yaml by hand with "
-    "provenance status 'manual', then run check_kg_health."
-)
-
 _INIT_STUB = (
     "cloud-architecture-validator-init is a design stub, not a working tool. "
     "Nothing was fetched or written.\n\n"
@@ -309,32 +327,126 @@ _INIT_STUB = (
 )
 
 
-def add_service_to_kg(name: str, provider: str, references_url: str = "") -> dict:
-    """Add one service to the knowledge graph. NOT IMPLEMENTED — returns why.
+def add_service_to_kg(
+    name: str,
+    provider: str,
+    network_placement: str = "",
+    reachability: str = "",
+    roles: list[str] | None = None,
+    references_url: str = "",
+) -> dict:
+    """Add service after human supplies judgment fields.
 
-    Args:
-        name: Service display name.
-        provider: 'gcp' or 'azure'.
-        references_url: Provider documentation URL.
-
-    Returns:
-        {'implemented': False, 'message': ...}. Relay the message as-is; do
-        not work around it by editing the KG yourself.
+    Safe fields are proposed by existing add-service helpers. Network placement,
+    reachability, and roles are never inferred; caller must collect them from
+    engineer before this tool writes. New entries remain unverified.
     """
-    return {"implemented": False, "requested": {"name": name, "provider": provider,
-            "references_url": references_url}, "message": _ADD_STUB}
+    roles = roles or []
+    required = {
+        "network_placement": network_placement,
+        "reachability": reachability,
+        "roles": roles,
+    }
+    for field, value in required.items():
+        if not value:
+            return {"written": False, "error": "missing_field", "field": field}
+
+    try:
+        from kg_io import find_existing, load_services, write_entry
+        from propose import propose_safe_fields
+        from provenance import build_provenance
+    except ModuleNotFoundError:
+        # Deployed agent package does not include authoring-only sibling scripts.
+        # Keep same non-interactive contract with PyYAML-only local helpers.
+        import yaml
+
+        def load_services(path):
+            with open(path, encoding="utf-8") as handle:
+                return yaml.safe_load(handle) or {"services": []}
+
+        def find_existing(services, service_name, service_provider):
+            return next(
+                (
+                    entry
+                    for entry in services.get("services", [])
+                    if entry.get("name", "").lower() == service_name.lower()
+                    and entry.get("provider", "").lower() == service_provider.lower()
+                ),
+                None,
+            )
+
+        def write_entry(path, services, entry, mode="append"):
+            services.setdefault("services", []).append(entry)
+            with open(path, "w", encoding="utf-8") as handle:
+                yaml.safe_dump(services, handle, sort_keys=False)
+
+        def propose_safe_fields(service_name, service_provider, reference_url=None):
+            return {
+                "category": None,
+                "description": None,
+                "references_url": reference_url,
+                "icon": None,
+                "sources": [reference_url] if reference_url else [],
+            }
+
+        def build_provenance(sources):
+            return {
+                "generated": "cloud-architecture-validator-add",
+                "status": "unverified",
+                "sources": sources or [],
+            }
+
+    kg_path = _APP_DIR / "references" / "kg" / "services.yaml"
+    services = load_services(kg_path)
+    existing = find_existing(services, name, provider)
+    if existing:
+        return {"written": False, "existing": existing}
+
+    proposal = propose_safe_fields(name, provider, references_url or None)
+    entry = {
+        "id": name.lower().replace(" ", "-"),
+        "name": name,
+        "provider": provider,
+        "category": proposal.get("category"),
+        "description": proposal.get("description"),
+        "references_url": references_url or proposal.get("references_url"),
+        "icon": proposal.get("icon"),
+        "network_placement": network_placement.split(),
+        "reachability": reachability,
+        "roles": roles,
+        "provenance": build_provenance(proposal.get("sources", [])),
+    }
+    write_entry(kg_path, services, entry, mode="append")
+    return {"written": True, "entry": entry}
+
+
+def propose_equivalence(service_name: str, provider_from: str) -> dict:
+    """Return recorded cross-cloud mapping, or explicit unknown/not-applicable."""
+    node, _ = _KG.resolve(service_name)
+    if node is not None and set(node.get("roles", [])) & _KG.regenerate_roles:
+        return {
+            "status": "not_applicable",
+            "reason": "connector role has no equivalent by design",
+        }
+
+    target_provider = "azure" if provider_from.lower() == "gcp" else "gcp"
+    equivalents, criteria = _KG.equivalents(service_name, target_provider)
+    if equivalents:
+        return {
+            "status": "found",
+            "equivalence": {
+                "provider_from": provider_from,
+                "service_name_from": service_name,
+                "provider_to": target_provider,
+                "targets": equivalents,
+                "selection_criteria": criteria,
+            },
+        }
+    return {"status": "unknown", "message": "no known equivalent yet"}
 
 
 def init_kg_from_catalog(source: str = "", version_tag: str = "") -> dict:
-    """Bulk-populate the knowledge graph from a catalog. NOT IMPLEMENTED.
-
-    Args:
-        source: URL of the public service catalog.
-        version_tag: Label for this sync, for rollback.
-
-    Returns:
-        {'implemented': False, 'message': ...}. Relay the message as-is.
-    """
+    """Bulk-populate the knowledge graph from a catalog. NOT IMPLEMENTED."""
     return {"implemented": False, "requested": {"source": source,
             "version_tag": version_tag}, "message": _INIT_STUB}
 
@@ -346,8 +458,9 @@ ALL_TOOLS = [
     lookup_service,
     search_services,
     export_kg_graph,
-    render_drawio_diagram,
+    render_ascii_diagram,
     check_kg_health,
     add_service_to_kg,
+    propose_equivalence,
     init_kg_from_catalog,
 ]
