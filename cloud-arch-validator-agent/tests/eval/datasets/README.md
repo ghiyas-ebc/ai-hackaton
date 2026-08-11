@@ -100,3 +100,34 @@ Once you have a baseline, the eval surface has a few more commands worth knowing
 - `agents-cli eval optimize` — auto-tune your agent's prompts using eval data.
 
 See the [Evaluation Guide](https://google.github.io/agents-cli/guide/evaluation/) for the full surface and metric reference.
+
+## Architecture Validator Dataset
+
+`architecture-validator-dataset.json` mirrors all nine cases in `app/evals/evals.json`. Case IDs and Indonesian prompts stay unchanged. `source_assertions` rubric groups preserve each source assertion for case-specific grading.
+
+Validate migration locally:
+
+```bash
+python tests/eval/validate_dataset.py
+```
+
+Generate and grade traces:
+
+```bash
+agents-cli eval generate \
+  --dataset tests/eval/datasets/architecture-validator-dataset.json \
+  --output artifacts/traces/<run>/
+agents-cli eval grade \
+  --config tests/eval/eval_config.yaml \
+  --traces artifacts/traces/<run>/ \
+  --output artifacts/grades/<run>/
+```
+
+Compare or analyze results:
+
+```bash
+agents-cli eval compare artifacts/grades/<baseline>.json artifacts/grades/<run>.json
+agents-cli eval analyze artifacts/grades/<run>.json
+```
+
+E02's post-choice translation assertion needs a continued conversation containing user choices. Initial response grading must not mark that assertion passed without follow-up evidence.

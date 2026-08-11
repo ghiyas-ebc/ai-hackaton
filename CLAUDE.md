@@ -358,7 +358,7 @@ most of the reasoning behind the model; keep them when editing, and prefer
 YAML over JSON for that reason.
 
 <!-- SPECKIT START -->
-Active plan: specs/005-unicode-architecture-renderer/plan.md
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
+at specs/006-agents-cli-eval-metrics/plan.md
 <!-- SPECKIT END -->
