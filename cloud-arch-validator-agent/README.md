@@ -103,4 +103,6 @@ agents-cli eval compare artifacts/grades/<baseline>.json artifacts/grades/<run>.
 agents-cli eval analyze artifacts/grades/<run>.json
 ```
 
-Dataset migration preserves nine source cases, Indonesian prompts, and per-case assertion rubrics. See `tests/eval/datasets/README.md`.
+Dataset migration preserves the source cases, Indonesian prompts, and per-case assertion rubrics. Regenerate the dataset with `python tests/eval/convert_dataset.py` after editing `app/evals/evals.json`.
+
+Graded by `instruction_following`, `hallucination`, and `verdict_grounding` — the last is local and deterministic, and is the only one that can see invariant #1: it fails a case whose response asserts a verdict with no rule-engine tool call behind it. `eval_config.yaml` records why the other two built-ins were dropped. See `tests/eval/datasets/README.md`.

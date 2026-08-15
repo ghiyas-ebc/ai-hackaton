@@ -9,9 +9,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_converted_dataset_preserves_source_cases():
+    # 10 since E02b was added: E02 only proves the agent asks about the ambiguous
+    # Pub/Sub and load-balancer choices, so translation itself went unexercised
+    # until a case supplied those choices.
     validate()
-    assert len(load_source()) == 9
-    assert len(load_target()) == 9
+    assert len(load_source()) == 10
+    assert len(load_target()) == 10
 
 
 def test_converted_dataset_has_unique_ids_and_all_assertions():

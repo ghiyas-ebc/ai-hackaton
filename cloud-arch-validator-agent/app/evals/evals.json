@@ -25,6 +25,17 @@
       ]
     },
     {
+      "id": "E02b-cross-cloud-choices",
+      "prompt": "Oke, buat Pub/Sub pakai Service Bus aja, dan Cloud Load Balancing-nya yang global L7. Tolong lanjutin translate arsitektur GCP tadi (Cloud Run, Cloud SQL, Pub/Sub, Cloud Load Balancing) ke Azure.",
+      "assertions": [
+        "calls translate_architecture now that the ambiguous choices are resolved, instead of asking again",
+        "honours the stated choices: Service Bus for Pub/Sub, global L7 for Cloud Load Balancing",
+        "shows VNet Integration emerging from the Azure rules rather than translated one-to-one from a GCP connector",
+        "surfaces caveats for every PARTIAL equivalent",
+        "replies in Indonesian"
+      ]
+    },
+    {
       "id": "E03-unknown-service",
       "prompt": "Bisa cek arsitektur ini? Cloud Run nyambung ke Cloud Composer terus ke BigQuery.",
       "assertions": [
