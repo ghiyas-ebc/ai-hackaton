@@ -1,0 +1,33 @@
+# Local Postgres for development and tests.
+#
+# The graph moved into a database; it did not move into someone else's cloud.
+# Running `docker compose up -d db` and seeding is the whole setup, with no
+# project, no credentials and no network beyond localhost — which matters
+# because this tool gets demoed to Azure clients, and needing a GCP account in
+# hand to show them an Azure architecture makes no sense.
+#
+# Cloud SQL swaps in by changing CAV_PG_DSN and nothing else. No client library
+# reaches into the code, so there is nothing else to change.
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: cav-postgres
+    environment:
+      POSTGRES_USER: cav
+      POSTGRES_PASSWORD: cav
+      POSTGRES_DB: cav
+    ports:
+      - "5432:5432"
+    volumes:
+      - cav-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The seed script runs immediately after `up` in most workflows, and
+      # Postgres accepts connections briefly before it is actually ready.
+      test: ["CMD-SHELL", "pg_isready -U cav -d cav"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  cav-pgdata:

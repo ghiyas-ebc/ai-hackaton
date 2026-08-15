@@ -2,10 +2,46 @@
 
 ## What this project is
 
-An ADK agent front-end for the four `cloud-architecture-validator-*` skills in
-the parent repository. It exposes their scripts as ten tools and lets a
-salesperson or presales engineer describe an architecture in prose instead of
-assembling a `--edges "a>b,b>c"` string by hand.
+A multi-agent ADK application over a knowledge graph of cloud services stored in
+Postgres. It lets a salesperson or presales engineer describe an architecture in
+prose instead of assembling a `--edges "a>b,b>c"` string by hand.
+
+This used to be a front-end for four Claude Skills that read YAML files. Both
+halves of that changed: the graph moved into Postgres (parent repo's D24) and
+the single agent became a coordinator plus three specialists (D25). The skill
+directories are retired.
+
+### Layout
+
+| Path | What it is |
+|------|------------|
+| `app/agent.py` | Coordinator. No tools — it routes and nothing else. |
+| `app/sub_agents/` | `validator`, `explorer`, `curator`. One job each. |
+| `app/tools.py` | Tool implementations and the per-agent groupings. |
+| `app/kg_lib/` | The rule engine, plus `kg_pg.py` / `kg_write.py` / `pgconn.py`. |
+| `db/schema.sql` | The graph's tables. |
+| `db/seed_from_yaml.py` | One-shot migration from the retiring YAML. |
+
+### Getting a database
+
+```bash
+docker compose up -d db
+uv run python db/seed_from_yaml.py
+```
+
+`CAV_PG_DSN` is the only setting that knows where the database is; pointing it
+at Cloud SQL is the whole of moving there. `CAV_KG_BACKEND=local` falls back to
+the YAML in `app/references/kg/` — no longer authoritative, kept because it
+needs no database and is what the migration is verified against.
+
+### Which tools an agent holds is the boundary
+
+The read-only agents hold no writer and the curator holds no verdict tool. This
+is not decoration: every one of those rules is also a sentence in a prompt, and
+a prompt can be argued with, while a tool the agent was never handed cannot be
+called. `tests/unit/test_agent_boundaries.py` asserts it. If you add a tool,
+add it to a group in `app/tools.py` — `ALL_TOOLS` is derived from the groups,
+so a tool that belongs to no agent is exposed to nobody.
 
 `generate_verdict_card` (in `app/kg_lib/verdict_card.py`) is the primary tool
 for a live sales conversation: it wraps `validate_architecture`'s output into
@@ -25,47 +61,50 @@ decides whether a connection is valid, stop — that defeats the product.
 
 `UNCOVERED` and `UNKNOWN_SERVICE` are correct answers, not bugs to route around.
 
-### Vendored knowledge graph
+### The rule engine was not rewritten for Postgres
 
-| Path | Origin |
-|------|--------|
-| `app/kg_lib/` | `create-architect/scripts/` + the three sibling skills' scripts |
-| `app/references/` | `create-architect/references/` |
-| `app/evals/` | `create-architect/evals/` |
+`kg_pg.py` returns the same `KnowledgeGraph` object the YAML loader did, so
+`validate.py`, `translate.py`, `verdict_card.py` and `check_kg.py` never learn
+where their rows came from. That is what carries invariant #1 through the
+storage change: the engine still decides every verdict, in the same Python, and
+the 37/37 regression fixture passes against Postgres unchanged.
 
-Copied verbatim so the agent is self-contained and deployable in a container.
-One edit was needed: `export_kg_graph.py` no longer resolves a cross-skill
-sibling path. **Do not reformat anything under `app/kg_lib/` or `app/evals/`** —
-they are excluded from ruff precisely so a diff against the skills shows real
-drift rather than style noise. Fix bugs in the skills first, then re-copy.
+Keep it that way. If a change would make the engine issue SQL, the verdict logic
+has started living in two places.
 
-The vendored layout mirrors the skill's own, which is why `kg.py` (`KG_DIR =
-../references/kg`) and `check_kg.py` (`../evals`) needed no changes.
+**Do not reformat anything under `app/kg_lib/` or `app/evals/`** — they are
+excluded from ruff so a diff shows real drift rather than style noise.
 
-Those scripts import each other by bare name (`import kg`). `app/tools.py` puts
+Those modules import each other by bare name (`import kg`). `app/tools.py` puts
 `app/kg_lib/` on `sys.path` with a plain statement before importing them —
 deliberately not `from . import kg_lib`, which isort would hoist above the
-imports it enables, failing only at runtime.
+imports it enables, failing only at runtime. That is why `app/tools.py` carries
+a per-file `E402` ignore.
 
-### Two tools are not implemented
+### One tool is not implemented
 
-`add_service_to_kg` and `init_kg_from_catalog` return `{'implemented': False}`
-with an explanation. The underlying skills are design stubs: `-add` still needs
-the human gate over `network_placement` / `reachability` / `roles` (a wrong
-`reachability` fails silently across ~20 pairs and `check_kg.py` reports clean),
-and `-init` has no source URL chosen. Building either means resolving that in
-the parent repo first.
+`init_kg_from_catalog` returns `{'implemented': False}` with an explanation — no
+source catalog URL has been chosen (parent repo, open questions). `add_service_
+to_kg` now works and writes to Postgres, gated on an engineer supplying the
+three judgment fields.
 
 ### Checks
 
 ```bash
-uv run pytest tests/unit tests/integration   # unit tests cover all 10 tools
-uv run ruff check app tests
+uv run pytest tests/unit tests/integration
+uv run ruff check app tests db
 ```
 
 `tests/unit/test_tools.py` asserts on rule-engine output, which is deterministic
 and therefore belongs in pytest rather than eval. It includes the KG's own gate:
 clean integrity and 37/37 regression.
+
+Tests needing Postgres skip when `CAV_PG_DSN` does not answer. Two things follow
+from the graph being writable rather than a fixed file, and both bit once
+already: do not assert exact service counts (a legitimate write breaks the
+build), and do not assert the health report is blank (an entry pending human
+sign-off is *supposed* to hold it open, and a test demanding silence pushes
+whoever hits it toward clearing the flag instead of doing the review).
 
 Load `.env` before running anything (`set -a; . ./.env; set +a`) — without it
 the model client fails with "No API key was provided."
