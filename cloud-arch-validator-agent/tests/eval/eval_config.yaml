@@ -1,8 +1,34 @@
-# Use Agent Platform/ADK built-in metrics only. Custom metrics are intentionally
-# omitted: per-case rubric groups caused Vertex critique-parser failures when
-# assertion counts and judge properties diverged.
+# Metric selection is driven by what the 2026-08-10 baseline run actually
+# produced, not by what sounds comprehensive.
+#
+# Kept:
+#   instruction_following  8/9 valid — usable signal.
+#   hallucination          9/9 valid — usable, but note it grades the response
+#                          against the prompt, so it scored the fabricated E05
+#                          Verdict Card 1.0. It cannot see invariant #1.
+#   verdict_grounding      deterministic, local; covers exactly the gap above.
+#
+# Dropped:
+#   final_response_quality 5/9 errored with "Failed to parse critique response:
+#                          Mismatch in parsed properties, rationales, or
+#                          verdicts count" — the same Vertex critique-parser
+#                          failure that killed the per-case rubric metric. A
+#                          mean over 4 surviving cases is not a measurement.
+#   tool_use_quality       7/9 errored: 4x "requires tool calls ... none found"
+#                          on cases where calling no tool is correct or is
+#                          itself the defect, 3x the critique-parser failure.
+#                          The tool-behavior question it was meant to answer is
+#                          answered structurally by verdict_grounding instead.
+#
+# Restore either once the critique parser stops failing on long markdown
+# responses; both are Agent Platform built-ins, nothing here forks them.
 metrics_to_run:
-  - final_response_quality
   - instruction_following
-  - tool_use_quality
   - hallucination
+  - verdict_grounding
+
+custom_metrics:
+  # Deterministic, no judge, no network. See verdict_grounding.py for why this
+  # is code rather than a rubric.
+  - name: verdict_grounding
+    custom_function_file: verdict_grounding.py
