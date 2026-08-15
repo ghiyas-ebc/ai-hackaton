@@ -73,7 +73,7 @@ ATTRIBUTES = [
     "alternatives",
     "regenerate_roles",
     "equivalences",
-    "icons",
+    "role_catalog",
 ]
 
 
@@ -126,7 +126,7 @@ def test_yaml_comments_are_carried_across_not_dropped(rows):
         "doc:architecture-rules",
         "doc:equivalences",
         "doc:overrides",
-        "doc:icons",
+        "doc:role-catalog",
     }
     assert "serverless_offvpc" in docs["doc:services"]
     assert "FIRST MATCH WINS" in docs["doc:connectivity-rules"].upper()
@@ -166,10 +166,10 @@ needs_db = pytest.mark.skipif(
 )
 
 
-# `services` and `icons` are the two the curator writes to, so they are checked
-# for containment below instead. The rest are rule tables that nothing writes at
-# runtime, and equality is the right assertion for them.
-WRITABLE = {"services", "icons"}
+# `services` is what the curator writes to, so it is checked for containment
+# below instead. The rest are rule tables that nothing writes at runtime, and
+# equality is the right assertion for them.
+WRITABLE = {"services"}
 
 
 @needs_db
@@ -192,10 +192,6 @@ def test_every_migrated_service_survived_the_round_trip(from_yaml):
     for service_id, entry in from_yaml.services.items():
         assert service_id in from_db.services, f"{service_id} did not survive"
         assert from_db.services[service_id] == entry
-
-    for service_id, mapping in from_yaml.icons["services"].items():
-        assert from_db.icons["services"][service_id] == mapping
-    assert from_db.icons["categories"] == from_yaml.icons["categories"]
 
     # And the migrated entries still hold the front of the ordering, which is
     # what `by_role(...)[0]` reads.

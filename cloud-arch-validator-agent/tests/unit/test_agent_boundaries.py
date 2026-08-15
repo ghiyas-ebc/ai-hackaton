@@ -63,12 +63,18 @@ def test_every_agent_can_look_a_service_up():
         assert tools.lookup_service in _tools_of(agent)
 
 
-def test_the_broken_drawio_path_is_exposed_to_nobody():
-    """`--embed-icons` is a known-broken code path, and a broken diagram in
-    front of a client is worse than no diagram."""
-    assert tools.render_drawio_diagram not in tools.ALL_TOOLS
-    for agent in (validator_agent, explorer_agent, curator_agent):
-        assert tools.render_drawio_diagram not in _tools_of(agent)
+def test_there_is_exactly_one_renderer():
+    """The draw.io emitter is gone, and nothing may quietly reintroduce one.
+
+    It was exposed to no agent for the whole of its life — its icon-embedding
+    path was known broken and never diagnosed — while costing an icon mapping
+    in the schema, one of the generated YAML files, and two sections of the
+    graph's own health gate. A second renderer that nobody can reach is not a
+    feature in reserve; it is a surface that rots.
+    """
+    renderers = [t for t in tools.ALL_TOOLS if "render" in t.__name__]
+    assert renderers == [tools.render_ascii_diagram]
+    assert not hasattr(tools, "render_drawio_diagram")
 
 
 def test_all_tools_is_the_union_of_what_agents_actually_hold():

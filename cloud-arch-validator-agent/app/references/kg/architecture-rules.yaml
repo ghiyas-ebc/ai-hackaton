@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Layers 2-8 — architecture-level checks, not pairwise connection checks.
 # Layer 1 answers "can A connect to B". Everything above it answers the question
 # the client's architect actually asks in a design review: will this hold up, is
@@ -153,7 +153,6 @@ rules:
     data_residency:
     - id
     - eu
-
 # L8 — derived entirely from equivalences.yaml, so it costs no new node
 # properties and cannot drift from what translate.py would actually do. Both
 # ship at INFO regardless of how alarming they sound: per D14, a rule whose
@@ -167,7 +166,6 @@ rules:
   message: No logging or monitoring is shown. Reasonable for a PoC, but usually asked about
     in a production proposal.
   remediation: Add a monitoring note, or state that it is out of PoC scope.
-
 # L8 — derived entirely from equivalences.yaml, so it costs no new node
 # properties and cannot drift from what translate.py would actually do. Both
 # ship at INFO regardless of how alarming they sound: per D14, a rule whose

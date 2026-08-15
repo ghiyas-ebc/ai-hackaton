@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Layer 1 — connectivity validity, derived from node properties.
 # Evaluated in order, FIRST MATCH WINS. The ordering is not cosmetic: more
 # specific rules must sit above general rules that would also match.
@@ -152,6 +152,21 @@ rules:
   severity: WARNING
   message: Pod access should go through an auth proxy sidecar rather than connecting straight
     to the database IP with static credentials.
+- id: CONN-K8S-TO-CACHE
+  when:
+    source:
+      any_role:
+      - kubernetes
+    target:
+      any_role:
+      - cache
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: A managed cache is reached with a long-lived auth string by default, and that string
+    tends to live in a manifest or an environment variable rather than in the secret store.
+    Prefer the provider's identity-based authentication with workload identity where the cache
+    supports it; where the auth string is used, mount it from the secret store and keep in-transit
+    encryption on.
 - id: CONN-K8S-TO-SECRET
   when:
     source:
@@ -225,7 +240,6 @@ rules:
   verdict: ALLOWED
   severity: null
   message: A data pipeline writing to an analytics sink or a datastore.
-
 # Fallback when no rule matches. Deliberately NOT "unknown, review manually" as
 # in the original draft: under a property model, no match means the combination
 # genuinely falls outside every known pattern, not merely that nobody has

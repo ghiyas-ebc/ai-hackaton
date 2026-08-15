@@ -22,6 +22,16 @@ dependencies = [
     # is what the migration is tested against and what the loader falls back to
     # when no database is configured.
     "pyyaml>=6.0",
+    # ASCII flowchart layout. Pulls networkx and pillow — neither is a cloud
+    # client and neither needs credentials, so invariant #3 is intact, but the
+    # cost is real and worth naming: pillow is a compiled extension imported
+    # eagerly for a PNG export this project does not use.
+    #
+    # Adopted because the layout is Sugiyama rather than force-directed, which
+    # makes it deterministic — verified across processes under a randomised
+    # PYTHONHASHSEED. A renderer that draws the same architecture differently
+    # on two runs is not usable in a document that goes to a client.
+    "retroflow>=0.10,<1.0",
 ]
 requires-python = ">=3.11,<3.14"
 

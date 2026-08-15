@@ -84,11 +84,25 @@ def _header(settings, key):
     note = settings.get(key)
     if not note:
         return GENERATED_BANNER + "\n"
-    return GENERATED_BANNER + "#\n" + _comment(note) + "\n"
+    # Blank line, not a `#`, between the banner and the note. The banner is
+    # metadata about how the file was produced; the note is the file's own
+    # documentation. Run together into one comment block they are also one
+    # block to whatever reads the file back, and the seed cannot tell where to
+    # stop — which is how the banner ended up inside the `doc:` row and got
+    # written twice by the export after that.
+    return GENERATED_BANNER + "\n" + _comment(note) + "\n"
 
 
 def _inject_entry_comments(body, notes, anchor_prefix="- id: "):
-    """Put each entry's rationale above it, where a reader will find it."""
+    """Put each entry's rationale above it, where a reader will find it.
+
+    Directly above, with no blank line. The blank line that used to separate
+    them cost more than the whitespace was worth: a comment block separated by
+    one belongs to the section rather than to the entry, by the seed's own
+    parsing rule, so on re-import the note detached from the entry it describes
+    and was collected as trailing commentary on the entry *before* it. The WAF
+    note on Application Gateway came back attached to Azure Load Balancer.
+    """
     if not notes:
         return body
     out = []
@@ -99,7 +113,7 @@ def _inject_entry_comments(body, notes, anchor_prefix="- id: "):
             note = notes.get(key)
             if note:
                 indent = line[: len(line) - len(line.lstrip())]
-                out.append("\n" + _comment(note, indent))
+                out.append(_comment(note, indent))
         out.append(line)
     return "".join(out)
 
@@ -259,22 +273,10 @@ def build_documents(rows):
         ],
     }
 
-    # -- icons -------------------------------------------------------------
-    categories = {}
-    for r in rows["icon_category"]:
-        categories.setdefault(r["provider"], {})[r["category"]] = {
-            "name": r["name"],
-            "file": r["file"],
-        }
-    icon_services = {
-        r["service_id"]: _compact({
-            "provider": r["provider"],
-            "type": r["type"],
-            "icon": r["icon"],
-            "category": r["category"],
-            "note": r["note"],
-        })
-        for r in rows["service_icon"]
+    # -- role catalog ------------------------------------------------------
+    role_catalog = {
+        r["role"]: _compact({"kind": r["kind"], "note": r["note"]})
+        for r in rows.get("role_catalog") or []
     }
 
     return {
@@ -292,9 +294,9 @@ def build_documents(rows):
             }),
         "overrides.yaml":
             _header(doc_notes, "doc:overrides") + _dump(overrides_doc),
-        "icons.yaml":
-            _header(doc_notes, "doc:icons")
-            + _dump({"categories": categories, "services": icon_services}),
+        "role-catalog.yaml":
+            _header(doc_notes, "doc:role-catalog")
+            + _dump({"roles": role_catalog}),
     }
 
 

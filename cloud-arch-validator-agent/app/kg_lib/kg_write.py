@@ -19,7 +19,15 @@ What the database changed, and what it did not:
            lookup, so they still come from a human and land as `unverified`
            until one signs off. The gate is unchanged; it just has a floor
            under it now.
+
+`roles` got the same treatment later: it is a closed set too, held by
+`role_catalog` and enforced by a foreign key. A role outside that set is
+refused with a correction where one is obvious; an entry whose roles are all
+descriptive is written with a warning rather than refused, because refusing it
+pushes toward a wrong role. See `validate_roles` and `roles_note`.
 """
+
+import difflib
 
 REQUIRED_FIELDS = (
     "name",
@@ -96,6 +104,96 @@ def validate_fields(fields):
     return None
 
 
+# How close a string has to be before it is offered as a correction. Tuned on
+# the actual vocabulary: 0.75 resolves every single-character slip tried
+# against it and offers nothing for `monitoring` or `blockchain`, which are not
+# typos but concepts the graph has no word for. Offering a role for those would
+# be guessing, which is the thing this whole system refuses to do.
+SUGGEST_CUTOFF = 0.75
+
+
+def suggest_roles(catalog, roles):
+    """{unrecognised role: [near matches]}. A suggestion, never a substitution.
+
+    `datstore` -> `datastore` is a dropped letter: edit distance, not meaning.
+    That distinction is why this is `difflib` over 40 strings and not a vector
+    search. Embeddings measure semantics, so the nearest neighbours of
+    `datastore` are `object_store`, `cache` and `wide_column_db` — all real,
+    all different roles. A ranker that confidently returns one of those for a
+    typo replaces a visible empty result with an invisible wrong one.
+
+    Nothing here rewrites the caller's input. A near match is reported back so
+    a person or a model can correct it; silently accepting `datstore` as
+    `datastore` would be the same guess by another route.
+    """
+    out = {}
+    for role in roles:
+        if not role or role in catalog:
+            continue
+        near = difflib.get_close_matches(
+            role, sorted(catalog), n=3, cutoff=SUGGEST_CUTOFF
+        )
+        if near:
+            out[role] = near
+    return out
+
+
+def validate_roles(catalog, roles):
+    """Check roles against the catalog. Pure; `catalog` is role -> kind.
+
+    An unknown role is almost always a typo, and the database refuses it by
+    foreign key a moment later anyway. Catching it here turns an IntegrityError
+    into a list of what was actually available plus a correction where one is
+    obvious, which is what the engineer being asked needs.
+    """
+    unknown = [r for r in roles if r not in catalog]
+    if unknown:
+        problem = {
+            "error": "unknown_role",
+            "roles": unknown,
+            "allowed": sorted(catalog),
+        }
+        near = suggest_roles(catalog, unknown)
+        if near:
+            problem["did_you_mean"] = near
+        return problem
+    return None
+
+
+def roles_note(catalog, roles):
+    """Warn when nothing in the engine will ever match this entry's roles.
+
+    This used to be a refusal, and refusing was the wrong call. The entry is
+    spelled correctly and describes the service accurately; what it lacks is a
+    rule that reads any of its roles. Blocking the write there puts a curator
+    who wants it to succeed one step away from attaching `compute` or
+    `datastore` to something that is neither — and a *wrong* load-bearing role
+    is D6's twenty-confidently-wrong-verdicts case, which is far worse than an
+    entry that matches nothing.
+
+    An entry that matches nothing answers UNCOVERED, which is a correct answer
+    under invariant #5, and the gap record logs it as a rule to write. Say so
+    plainly and let it through.
+    """
+    if any(catalog.get(r) == "load_bearing" for r in roles):
+        return None
+    return (
+        "None of these roles is load-bearing, so no rule matches this entry: "
+        "it will answer UNCOVERED wherever it appears, and the gap report will "
+        "record it as a rule that needs writing. That may be correct for this "
+        "service. If it is not, the missing piece is a role something in the "
+        f"engine reads — one of {sorted(r for r, k in catalog.items() if k == 'load_bearing')}."
+    )
+
+
+def role_catalog(conn):
+    """role -> kind, straight from the table the foreign key points at."""
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO kg, public")
+        cur.execute("SELECT role, kind FROM role_catalog")
+        return dict(cur.fetchall())
+
+
 def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
     """Insert one service. Returns the written entry, or a refusal.
 
@@ -107,6 +205,12 @@ def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
     problem = validate_fields(fields)
     if problem:
         return {"written": False, **problem}
+
+    catalog = role_catalog(conn)
+    problem = validate_roles(catalog, fields["roles"])
+    if problem:
+        return {"written": False, **problem}
+    role_warning = roles_note(catalog, fields["roles"])
 
     existing = find_service(conn, fields["name"], fields["provider"])
     if existing:
@@ -154,25 +258,9 @@ def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
             "INSERT INTO service_role (service_id, role, ord) VALUES (%s, %s, %s)",
             [(service_id, role, i) for i, role in enumerate(fields["roles"])],
         )
-        # Every service needs an icon mapping or the integrity check reports the
-        # whole graph unclean over one new entry. `generic` is the honest value:
-        # nobody has looked up whether the provider ships an icon for this, and
-        # the graph already uses `generic` for services where none exists. A
-        # curator can promote it to `core` later; leaving the row out would make
-        # the next `check_kg_health` call read as though the write broke
-        # something.
-        cur.execute(
-            "INSERT INTO service_icon (service_id, provider, type, note) "
-            "VALUES (%s, %s, 'generic', %s)",
-            (
-                service_id,
-                fields["provider"],
-                "Icon not yet mapped for this entry; drawn as a generic shape.",
-            ),
-        )
     conn.commit()
 
-    return {
+    result = {
         "written": True,
         "entry": {
             "id": service_id,
@@ -196,6 +284,9 @@ def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
             "in client material."
         ),
     }
+    if role_warning:
+        result["role_warning"] = role_warning
+    return result
 
 
 def record_gaps(conn, records):

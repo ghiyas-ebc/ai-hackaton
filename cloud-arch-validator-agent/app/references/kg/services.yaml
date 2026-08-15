@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Node table — one entry per service, across all providers.
 # Connection validity is NOT stored here and is not stored as a list of pairs.
 # It is derived from the properties below by connectivity-rules.yaml. Adding a
@@ -592,7 +592,6 @@ services:
   provenance:
     generated: manual
     status: manual
-
 # Note: WAF is a feature/SKU on this node, not a separate node. See
 # `features` below — the original draft modelled it as a standalone service,
 # which produced a dangling WAF box in the diagram.
