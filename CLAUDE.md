@@ -22,11 +22,13 @@ to three specialists (D25):
   verification. Gated on an engineer supplying `network_placement`,
   `reachability` and `roles` (D6, D26).
 
-The four `cloud-architecture-validator-*` skill directories are **retired** by
-D24. Their `references/kg/*.yaml` was the source of truth until it was migrated
-into Postgres; the copy that still matters is the agent's vendored
-`app/references/kg/`, which the seed reads and the parity tests check against.
-Do not add features to the skill directories.
+The four `cloud-architecture-validator-*` skill directories and the installed
+copy under `.claude/skills/` are **deleted** by D27. They held their own copies
+of the knowledge graph, one of which had gone two decisions stale while staying
+invocable. Postgres is the only source of truth now.
+
+`app/references/kg/*.yaml` still exists and is **generated output** — written by
+`db/export_to_yaml.py`, never edited. See D27.
 
 Its users are salespeople and presales engineers who do not design cloud
 architecture for a living, producing material that goes in front of a
@@ -41,8 +43,9 @@ All paths below are relative to `cloud-arch-validator-agent/`.
 
 ```bash
 docker compose up -d db                  # local Postgres, the graph's home
-uv run python db/seed_from_yaml.py       # one-shot: YAML -> Postgres
-uv run python db/seed_from_yaml.py --dry-run   # row counts, no database
+uv run python db/seed_from_yaml.py       # rebuild a database from the export
+uv run python db/export_to_yaml.py       # Postgres -> YAML, after any change
+uv run python db/export_to_yaml.py --check     # diff the export against the DB
 
 uv run pytest tests/unit tests/integration
 uv run ruff check app tests db
@@ -450,6 +453,65 @@ saying when. The curator writes `unverified` and the health check holds open
 until a human flips it — `mark_service_verified` requires the caller to supply
 the date rather than defaulting to today, because a date the tool invented would
 assert a review that did not happen.
+
+**D27 — One graph, in Postgres. The YAML is generated output and the skill
+directories are gone.** D24 moved the graph into Postgres and left four copies
+of the YAML behind: the agent's vendored set, the retired
+`create-architect/references/kg/`, and an installed copy under
+`.claude/skills/`. That was supposed to be temporary and instead became the
+system's main structural risk.
+
+The `.claude/skills/` copy is why this is a decision and not a cleanup. It was
+committed, it was invocable, and its graph predated two decisions: **0 of 45
+services carried a provenance block** (D21) and **the L0–L8 ladder was absent
+entirely**, along with both PORT rules (D23). Anything invoking that skill got
+connectivity answers with no architecture layer behind them and no sign-off
+gate, while the database three directories away had both. Two consumers, one
+product, different answers, and nothing anywhere reporting the divergence —
+`check_kg` cannot see a copy it does not read.
+
+All five skill directories are deleted (56 files). Nothing in the agent
+imported them.
+
+What stays is one YAML set under `app/references/kg/`, and it is now generated
+by `db/export_to_yaml.py` rather than authored. The direction of the arrow is
+the whole change: Postgres is written, YAML is produced from it. Before, the
+same files were simultaneously the seed input, the offline fallback, and the
+list of valid rule ids `verdict_grounding` checks a response against — three
+jobs, no owner, and a silent failure in each. Seed from a stale file and get an
+old graph. Run `CAV_KG_BACKEND=local` and get different verdicts than
+production. Add a rule in SQL and watch the metric score its id as fabricated.
+
+Deleting the YAML outright was the other option and was rejected for what it
+would have cost: a database is a poor review surface. You cannot see a proposed
+change to a connectivity rule in a pull request, cannot diff last month's graph
+against today's, and `docker volume rm` takes the whole thing. Those were
+properties of the graph being a file, and D24 gave them up without noticing.
+Generated-and-checked gets them back without reintroducing a second source.
+
+`tests/unit/test_kg_export_drift.py` is what makes the arrow real rather than a
+convention: it fails when the committed files disagree with the database, and
+`--check` prints the offending lines. The round-trip half runs without Postgres
+— export and re-import produce an identical graph, verified including the two
+orderings that decide verdicts (`service.ord`, `connectivity_rule.seq`) — and
+the 37/37 regression passes through the export unchanged.
+
+*Rejected: Apache AGE.* A graph extension sounds like the natural fit for a
+knowledge graph and is the wrong tool for this one. D2 is the reason: validity
+here is **derived from node properties at query time**, not stored. The 691
+edges `export_kg_graph` returns are computed by running the rule engine over
+every pair — they are output, not data. Persisting them as AGE vertices and
+edges is D2 reversed, and D21 already rejected the same store-nodes-and-edges
+model when it came up as Graphify/OKF. The edges that genuinely are stored —
+equivalences, aliases, alternatives — number about 30 against 45 nodes, are all
+one hop, and are already single joins. There is no traversal question the
+product asks that Cypher would answer better than the `WHERE` clause it is
+today. The cost is not theoretical either: **Cloud SQL does not allow-list
+AGE**, so adopting it would break D24's "Cloud SQL swaps in by changing
+`CAV_PG_DSN` and nothing else" and put self-managed Postgres on the critical
+path. *Reconsider if the graph ever stores multi-hop relationships it needs to
+traverse — dependency chains, blast radius, migration paths — which would be a
+real change in what the graph is for, not a change in how it is queried.*
 
 ## Open questions
 

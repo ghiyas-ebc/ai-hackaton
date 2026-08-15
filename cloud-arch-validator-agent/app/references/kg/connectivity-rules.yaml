@@ -1,213 +1,246 @@
-# Layer 1 — connectivity validity, derived from node properties.
+# GENERATED FILE — do not edit.
 #
+# Written by db/export_to_yaml.py from the Postgres knowledge graph, which
+# is the source of truth. An edit here is overwritten by the next export,
+# and tests/unit/test_kg_export_drift.py fails before that anyway.
+#
+# To change the graph: use the curator agent, or SQL, then re-run the
+# export. To rebuild a database from this file: db/seed_from_yaml.py.
+#
+# Layer 1 — connectivity validity, derived from node properties.
 # Evaluated in order, FIRST MATCH WINS. The ordering is not cosmetic: more
 # specific rules must sit above general rules that would also match.
-#
 # verdict:
-#   ALLOWED           — draw as a direct line
-#   ALLOWED_WITH_NOTE — draw directly, surface the note (severity INFO/WARNING)
-#   NEEDS_COMPONENT   — do NOT draw directly; insert a node holding `needs_role`
-#   BLOCKED           — do not draw; report to the user as a finding
-#   UNCOVERED         — no rule matched (fallback, see end of file)
-#
+# ALLOWED           — draw as a direct line
+# ALLOWED_WITH_NOTE — draw directly, surface the note (severity INFO/WARNING)
+# NEEDS_COMPONENT   — do NOT draw directly; insert a node holding `needs_role`
+# BLOCKED           — do not draw; report to the user as a finding
+# UNCOVERED         — no rule matched (fallback, see end of file)
 # needs_role is resolved to a concrete service belonging to the TARGET provider
 # at runtime. This is why intermediaries come out right during cross-provider
 # translation: `serverless_vpc_connector` becomes Serverless VPC Access on GCP
 # and VNet Integration on Azure with no separate rule.
-#
 # Predicates available under `when.source` / `when.target`:
-#   any_role, all_roles, none_role, placement_in, reachability_in, provider_in
+# any_role, all_roles, none_role, placement_in, reachability_in, provider_in
 # Predicates at the `when` level: same_provider (bool), same_node (bool)
 
 rules:
-
-  - id: CONN-SELF-LOOP
-    when:
-      same_node: true
-    verdict: BLOCKED
-    severity: ERROR
-    message: >-
-      A service cannot be connected to itself. This usually means the
-      description was parsed incorrectly — confirm with the user.
-
-  - id: CONN-CROSS-PROVIDER
-    when:
-      same_provider: false
-    verdict: BLOCKED
-    severity: ERROR
-    message: >-
-      A direct connection between different cloud providers is not valid within
-      one architecture without an explicit interconnect path (VPN, Interconnect,
-      ExpressRoute). If the intent was to compare or migrate the architecture,
-      that is the translation flow, not a connection.
-
-  - id: CONN-POLICY-ATTACH-VALID
-    when:
-      source: {placement_in: [policy]}
-      target: {any_role: [edge_entry, load_balancer_l7]}
-    verdict: ALLOWED
-    relationship: ATTACHES_TO
-    severity: null
-    message: >-
-      Attaches as a policy on the traffic entry point rather than sitting as a
-      separate hop in the request path.
-
-  - id: CONN-POLICY-ATTACH-INVALID
-    when:
-      source: {placement_in: [policy]}
-    verdict: BLOCKED
-    severity: ERROR
-    message: >-
-      A policy service (WAF/DDoS) can only attach to a traffic entry point such
-      as an L7 load balancer. It cannot be applied directly to compute or to a
-      datastore.
-
-  - id: CONN-EDGE-TO-HTTP
-    when:
-      source: {any_role: [edge_entry]}
-      target: {any_role: [http_target]}
-    verdict: ALLOWED
-    severity: null
-    message: The load balancer forwards traffic to an HTTP backend.
-
-  - id: CONN-EDGE-TO-NON-HTTP
-    when:
-      source: {any_role: [edge_entry]}
-      target: {any_role: [datastore]}
-    verdict: BLOCKED
-    severity: ERROR
-    message: >-
-      A load balancer must not point directly at a datastore. Traffic has to
-      pass through a compute layer that applies authorization and input
-      validation.
-
-  - id: CONN-SERVERLESS-TO-FABRIC
-    when:
-      source: {placement_in: [serverless_offvpc]}
-      target: {placement_in: [network_fabric]}
-    verdict: NEEDS_COMPONENT
-    needs_role: serverless_vpc_connector
-    severity: ERROR
-    message: >-
-      Serverless compute runs outside the customer's private network by default,
-      so it needs a dedicated connector to reach anything inside it.
-
-  - id: CONN-INVPC-TO-FABRIC
-    when:
-      source: {placement_in: [in_vpc]}
-      target: {placement_in: [network_fabric]}
-    verdict: ALLOWED_WITH_NOTE
-    severity: INFO
-    message: >-
-      Already inside the private network — this does not need to be drawn as a
-      connection, only as a boundary box around it.
-
-  - id: CONN-SERVERLESS-TO-PRIVATE-ONLY
-    when:
-      source: {placement_in: [serverless_offvpc]}
-      target: {reachability_in: [private_ip]}
-    verdict: NEEDS_COMPONENT
-    needs_role: serverless_vpc_connector
-    severity: ERROR
-    message: >-
-      The target is reachable only from inside a private network and has no
-      public path at all, while the source runs outside that network. Without a
-      connector this connection will fail — it is not merely less secure.
-
-  - id: CONN-SERVERLESS-TO-DUAL-ENDPOINT
-    when:
-      source: {placement_in: [serverless_offvpc]}
-      target: {reachability_in: [public_or_private]}
-    verdict: NEEDS_COMPONENT
-    needs_role: serverless_vpc_connector
-    severity: WARNING
-    message: >-
-      Technically this works over the target's public endpoint, so it will not
-      error outright. But it means database traffic crosses the public internet
-      — which almost always gets rejected in a client security review. A private
-      path through a connector is the version that holds up in front of an
-      architect.
-
-  - id: CONN-K8S-TO-RELATIONAL-DB
-    when:
-      source: {any_role: [kubernetes]}
-      target: {any_role: [relational_db]}
-    verdict: ALLOWED_WITH_NOTE
-    severity: WARNING
-    message: >-
-      Pod access should go through an auth proxy sidecar rather than connecting
-      straight to the database IP with static credentials.
-
-  - id: CONN-K8S-TO-SECRET
-    when:
-      source: {any_role: [kubernetes]}
-      target: {any_role: [secret_store]}
-    verdict: ALLOWED_WITH_NOTE
-    severity: INFO
-    message: >-
-      Use workload identity (Workload Identity / Managed Identity) rather than
-      mounting a service account key file into the pod.
-
-  - id: CONN-INVPC-TO-PRIVATE
-    when:
-      source: {placement_in: [in_vpc]}
-      target: {reachability_in: [private_ip, public_or_private]}
-    verdict: ALLOWED_WITH_NOTE
-    severity: INFO
-    message: >-
-      Valid as long as both sit in the same private network and the same region.
-      Different regions require peering and incur inter-region traffic charges.
-
-  - id: CONN-TO-CONNECTOR
-    when:
-      target: {placement_in: [connector]}
-    verdict: ALLOWED_WITH_NOTE
-    severity: INFO
-    message: >-
-      A connector is not a destination. Draw it as a small node on the edge
-      toward the real target, not as an endpoint of its own.
-
-  - id: CONN-CONNECTOR-TO-TARGET
-    when:
-      source: {placement_in: [connector]}
-      target: {placement_in: [managed_service, network_fabric]}
-    verdict: ALLOWED
-    severity: null
-    message: The connector bridges to a managed service or a private network.
-
-  - id: CONN-MESSAGING-TO-PROCESSING
-    when:
-      source: {any_role: [messaging, event_source]}
-      target: {any_role: [data_processing, event_consumer, compute]}
-    verdict: ALLOWED
-    severity: null
-    message: A natively supported event/message consumption pattern.
-
-  - id: CONN-PROCESSING-TO-SINK
-    when:
-      source: {any_role: [data_processing, ml_platform]}
-      target: {any_role: [analytics_sink, datastore]}
-    verdict: ALLOWED
-    severity: null
-    message: A data pipeline writing to an analytics sink or a datastore.
-
-  - id: CONN-ANY-TO-API-ENDPOINT
-    when:
-      target: {reachability_in: [api_endpoint]}
-    verdict: ALLOWED
-    severity: null
-    message: >-
-      Reached through an IAM-authorized API endpoint — the caller needs no
-      special network path.
+- id: CONN-SELF-LOOP
+  when:
+    same_node: true
+  verdict: BLOCKED
+  severity: ERROR
+  message: A service cannot be connected to itself. This usually means the description was
+    parsed incorrectly — confirm with the user.
+- id: CONN-CROSS-PROVIDER
+  when:
+    same_provider: false
+  verdict: BLOCKED
+  severity: ERROR
+  message: A direct connection between different cloud providers is not valid within one architecture
+    without an explicit interconnect path (VPN, Interconnect, ExpressRoute). If the intent
+    was to compare or migrate the architecture, that is the translation flow, not a connection.
+- id: CONN-POLICY-ATTACH-VALID
+  when:
+    source:
+      placement_in:
+      - policy
+    target:
+      any_role:
+      - edge_entry
+      - load_balancer_l7
+  verdict: ALLOWED
+  relationship: ATTACHES_TO
+  severity: null
+  message: Attaches as a policy on the traffic entry point rather than sitting as a separate
+    hop in the request path.
+- id: CONN-POLICY-ATTACH-INVALID
+  when:
+    source:
+      placement_in:
+      - policy
+  verdict: BLOCKED
+  severity: ERROR
+  message: A policy service (WAF/DDoS) can only attach to a traffic entry point such as an
+    L7 load balancer. It cannot be applied directly to compute or to a datastore.
+- id: CONN-EDGE-TO-HTTP
+  when:
+    source:
+      any_role:
+      - edge_entry
+    target:
+      any_role:
+      - http_target
+  verdict: ALLOWED
+  severity: null
+  message: The load balancer forwards traffic to an HTTP backend.
+- id: CONN-EDGE-TO-NON-HTTP
+  when:
+    source:
+      any_role:
+      - edge_entry
+    target:
+      any_role:
+      - datastore
+  verdict: BLOCKED
+  severity: ERROR
+  message: A load balancer must not point directly at a datastore. Traffic has to pass through
+    a compute layer that applies authorization and input validation.
+- id: CONN-SERVERLESS-TO-FABRIC
+  when:
+    source:
+      placement_in:
+      - serverless_offvpc
+    target:
+      placement_in:
+      - network_fabric
+  verdict: NEEDS_COMPONENT
+  needs_role: serverless_vpc_connector
+  severity: ERROR
+  message: Serverless compute runs outside the customer's private network by default, so it
+    needs a dedicated connector to reach anything inside it.
+- id: CONN-INVPC-TO-FABRIC
+  when:
+    source:
+      placement_in:
+      - in_vpc
+    target:
+      placement_in:
+      - network_fabric
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: Already inside the private network — this does not need to be drawn as a connection,
+    only as a boundary box around it.
+- id: CONN-SERVERLESS-TO-PRIVATE-ONLY
+  when:
+    source:
+      placement_in:
+      - serverless_offvpc
+    target:
+      reachability_in:
+      - private_ip
+  verdict: NEEDS_COMPONENT
+  needs_role: serverless_vpc_connector
+  severity: ERROR
+  message: The target is reachable only from inside a private network and has no public path
+    at all, while the source runs outside that network. Without a connector this connection
+    will fail — it is not merely less secure.
+- id: CONN-SERVERLESS-TO-DUAL-ENDPOINT
+  when:
+    source:
+      placement_in:
+      - serverless_offvpc
+    target:
+      reachability_in:
+      - public_or_private
+  verdict: NEEDS_COMPONENT
+  needs_role: serverless_vpc_connector
+  severity: WARNING
+  message: Technically this works over the target's public endpoint, so it will not error
+    outright. But it means database traffic crosses the public internet — which almost always
+    gets rejected in a client security review. A private path through a connector is the version
+    that holds up in front of an architect.
+- id: CONN-K8S-TO-RELATIONAL-DB
+  when:
+    source:
+      any_role:
+      - kubernetes
+    target:
+      any_role:
+      - relational_db
+  verdict: ALLOWED_WITH_NOTE
+  severity: WARNING
+  message: Pod access should go through an auth proxy sidecar rather than connecting straight
+    to the database IP with static credentials.
+- id: CONN-K8S-TO-SECRET
+  when:
+    source:
+      any_role:
+      - kubernetes
+    target:
+      any_role:
+      - secret_store
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: Use workload identity (Workload Identity / Managed Identity) rather than mounting
+    a service account key file into the pod.
+- id: CONN-INVPC-TO-PRIVATE
+  when:
+    source:
+      placement_in:
+      - in_vpc
+    target:
+      reachability_in:
+      - private_ip
+      - public_or_private
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: Valid as long as both sit in the same private network and the same region. Different
+    regions require peering and incur inter-region traffic charges.
+- id: CONN-TO-CONNECTOR
+  when:
+    target:
+      placement_in:
+      - connector
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: A connector is not a destination. Draw it as a small node on the edge toward the
+    real target, not as an endpoint of its own.
+- id: CONN-CONNECTOR-TO-TARGET
+  when:
+    source:
+      placement_in:
+      - connector
+    target:
+      placement_in:
+      - managed_service
+      - network_fabric
+  verdict: ALLOWED
+  severity: null
+  message: The connector bridges to a managed service or a private network.
+- id: CONN-MESSAGING-TO-PROCESSING
+  when:
+    source:
+      any_role:
+      - messaging
+      - event_source
+    target:
+      any_role:
+      - data_processing
+      - event_consumer
+      - compute
+  verdict: ALLOWED
+  severity: null
+  message: A natively supported event/message consumption pattern.
+- id: CONN-PROCESSING-TO-SINK
+  when:
+    source:
+      any_role:
+      - data_processing
+      - ml_platform
+    target:
+      any_role:
+      - analytics_sink
+      - datastore
+  verdict: ALLOWED
+  severity: null
+  message: A data pipeline writing to an analytics sink or a datastore.
 
 # Fallback when no rule matches. Deliberately NOT "unknown, review manually" as
 # in the original draft: under a property model, no match means the combination
 # genuinely falls outside every known pattern, not merely that nobody has
 # entered it yet.
+- id: CONN-ANY-TO-API-ENDPOINT
+  when:
+    target:
+      reachability_in:
+      - api_endpoint
+  verdict: ALLOWED
+  severity: null
+  message: Reached through an IAM-authorized API endpoint — the caller needs no special network
+    path.
 fallback:
+  message: This combination does not match any known connectivity pattern. Do not guess its
+    validity — flag it for architect review before it goes into client material.
   verdict: UNCOVERED
   severity: WARNING
-  message: >-
-    This combination does not match any known connectivity pattern. Do not guess
-    its validity — flag it for architect review before it goes into client
-    material.
