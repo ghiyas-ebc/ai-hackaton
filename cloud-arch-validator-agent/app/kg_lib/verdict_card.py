@@ -237,20 +237,28 @@ def _append_gap_records(records):
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
-def log_gap_records(edges, findings):
-    """Unconditional write — no confirmation gate (Constitution Principle IV)."""
+def log_gap_records(edges, findings, sink=None):
+    """Unconditional write — no confirmation gate (Constitution Principle IV).
+
+    `sink` takes the record list and stores it. It defaults to appending the
+    JSONL file, which is what keeps this module runnable with no database and
+    no configuration — the engine is handed its data and does not go looking
+    for it, and that stays true for what it writes as well. The caller passes a
+    Postgres sink when there is a database to write to.
+    """
     gaps = [
         f for f in findings
         if f["verdict"] in _UNCOVERED_VERDICTS or f["verdict"] in _UNKNOWN_VERDICTS
     ]
     records = [_gap_record(edges, f) for f in gaps]
-    _append_gap_records(records)
+    (sink or _append_gap_records)(records)
     return records
 
 
 # --------------------------------------------------------------------- card
 def generate_verdict_card(edges, environment=None, data_residency=None,
-                           sla_tier=None, stated_needs="", kg=None):
+                           sla_tier=None, stated_needs="", kg=None,
+                           gap_sink=None):
     """Build a Verdict Card from validate()'s output. See contracts/generate_verdict_card.md."""
     kg = kg or validate_module.kg_module.load()
 
@@ -280,7 +288,7 @@ def generate_verdict_card(edges, environment=None, data_residency=None,
 
     checklist, checklist_empty_reason = generate_checklist(findings)
 
-    log_gap_records(edges, findings)
+    log_gap_records(edges, findings, sink=gap_sink)
 
     public_findings = [
         {k: v for k, v in f.items() if not k.startswith("_")} for f in findings

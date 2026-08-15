@@ -43,6 +43,8 @@ All paths below are relative to `cloud-arch-validator-agent/`.
 
 ```bash
 docker compose up -d db                  # local Postgres, the graph's home
+uv run python db/migrate.py              # apply pending schema migrations
+uv run python db/migrate.py --status     # applied vs pending
 uv run python db/seed_from_yaml.py       # rebuild a database from the export
 uv run python db/export_to_yaml.py       # Postgres -> YAML, after any change
 uv run python db/export_to_yaml.py --check     # diff the export against the DB
@@ -512,6 +514,52 @@ AGE**, so adopting it would break D24's "Cloud SQL swaps in by changing
 path. *Reconsider if the graph ever stores multi-hop relationships it needs to
 traverse — dependency chains, blast radius, migration paths — which would be a
 real change in what the graph is for, not a change in how it is queried.*
+
+**D28 — Numbered migrations, a capped graph export, and the Gap Report in the
+database.** Three consequences of D24 that the migration itself did not carry,
+found by assessing the data layer rather than by anything breaking.
+
+*Schema changes have a path.* `schema.sql` was `CREATE TABLE IF NOT EXISTS`
+throughout, which works exactly once — re-running it against a populated
+database is a no-op, so the second change had nowhere to go but a hand-typed
+`ALTER` against live data with nothing recording it. It is now
+`db/migrations/0001_initial_schema.sql`, applied by `db/migrate.py` and recorded
+in `kg.schema_migration`. Plain SQL and a small runner; Alembic is more
+machinery than thirteen tables justify. Three properties earn their keep: each
+migration runs in its own transaction (Postgres has transactional DDL, so a
+failure leaves nothing behind — verified when 0003 failed on a bad `unnest` and
+rolled back clean), applied files are checksummed so editing one that already
+ran is refused rather than silently diverging, and a fresh database is not
+special-cased — seeding runs the same migrations production does.
+
+*`export_kg_graph` no longer returns 190 KB by default.* Its 691 edges are
+derived, not stored — every same-provider pair the engine allows — so they are
+output rather than data, and putting them in a context window answers no
+question the counts and a per-node degree do not answer better. Default is now
+a 12.6 KB summary; `include_edges=True` returns the full adjacency for the case
+where the adjacency is the answer.
+
+*The Gap Report is a table.* Every `UNCOVERED` verdict and unknown service logs
+a record, and that list is the only data here that cannot be regenerated — it is
+what real users actually asked. It was appending to a gitignored JSONL file
+inside the container, which made it the least durable thing in the system. It
+now writes to `kg.gap_record`, with `gap_summary` grouping repeats, because the
+question it exists to answer ("what should the graph cover next") is a join
+against the graph and was a hand-written script over a file.
+
+The engine did not learn about the database to make that work. `log_gap_records`
+takes a `sink`, defaulting to the file; `tools.py` injects a Postgres one and
+falls back to the file when the database is unreachable, because a gap is logged
+while a user waits on a verdict and storage being down is not their problem.
+
+One bug worth recording, because the fix is the general rule: 0002 resolved
+which service was missing by matching the element text against known ids in SQL.
+On `cloud-run -> cloud-composer` that finds `cloud-run` — the half that exists —
+and reported the gap as being about a known service, inverting the triage it
+existed to support. 0003 replaced it with `missing_services`, supplied by the
+caller, which resolved every id against the loaded graph while producing the
+verdict. The database should not be asked to re-derive something the caller
+already knew.
 
 ## Open questions
 

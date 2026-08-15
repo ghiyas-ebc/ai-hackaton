@@ -316,3 +316,30 @@ def test_init_stub_remains_explicit() -> None:
 def test_all_tools_exposes_new_functions() -> None:
     assert tools.add_service_to_kg in tools.ALL_TOOLS
     assert tools.propose_equivalence in tools.ALL_TOOLS
+
+
+def test_export_omits_the_derived_edges_by_default() -> None:
+    """691 derived edges is 190 KB of context for a question they rarely answer.
+
+    The edges are computed, not stored — every same-provider pair the engine
+    allows — so they are output rather than data, and the counts plus per-node
+    degree carry the same shape at a fraction of the size. They remain
+    available for the case where the adjacency itself is the answer.
+    """
+    summary = tools.export_kg_graph()
+    assert "edges" not in summary
+    assert summary["edges_omitted"] is True
+    assert summary["counts"]["edges"] > 0, "the count survives the omission"
+    assert all("out_degree" in n for n in summary["nodes"])
+
+    full = tools.export_kg_graph(include_edges=True)
+    assert len(full["edges"]) == full["counts"]["edges"]
+    assert full["edges_omitted"] is False
+
+
+def test_export_summary_is_an_order_of_magnitude_smaller() -> None:
+    import json
+
+    summary = len(json.dumps(tools.export_kg_graph(), default=str))
+    full = len(json.dumps(tools.export_kg_graph(include_edges=True), default=str))
+    assert summary * 5 < full, f"summary {summary} vs full {full}"

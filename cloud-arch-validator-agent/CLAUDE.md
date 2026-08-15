@@ -20,7 +20,8 @@ staying invocable.
 | `app/sub_agents/` | `validator`, `explorer`, `curator`. One job each. |
 | `app/tools.py` | Tool implementations and the per-agent groupings. |
 | `app/kg_lib/` | The rule engine, plus `kg_pg.py` / `kg_write.py` / `pgconn.py`. |
-| `db/schema.sql` | The graph's tables. |
+| `db/migrations/` | Numbered schema migrations, applied in order. |
+| `db/migrate.py` | Applies pending ones; refuses edits to applied files. |
 | `db/seed_from_yaml.py` | Rebuild a database from the export. |
 | `db/export_to_yaml.py` | Postgres → YAML. The only thing that writes it. |
 
@@ -28,8 +29,13 @@ staying invocable.
 
 ```bash
 docker compose up -d db
-uv run python db/seed_from_yaml.py
+uv run python db/migrate.py          # schema
+uv run python db/seed_from_yaml.py   # data
 ```
+
+Changing the schema means adding `db/migrations/NNNN_name.sql`, never editing an
+applied one — the runner checksums them and refuses. Migrations run one
+transaction each, so a failure leaves nothing behind.
 
 Use `docker-compose` (hyphen) if `docker compose` reports an unknown command —
 the v2 plugin symlink is broken on at least one machine here.
@@ -73,7 +79,8 @@ for a live sales conversation: it wraps `validate_architecture`'s output into
 a Verdict Card — one difficulty label, every finding tagged with an evidence
 tier (`Proven` / `Theoretically Possible` / `Requires Deep Review`), optional
 tech-mismatch detection, an engineer checklist, and automatic Gap Report
-logging to `app/references/gap_report.jsonl` for anything uncovered. See
+logging to `kg.gap_record` for anything uncovered — the JSONL file remains only
+as the fallback when the database is unreachable. See
 `specs/001-verdict-card/` in the parent repo for the full design. Like
 everything else here, it is a pure transformation over the rule engine's
 output — no tier, score, or checklist item is decided by the model.

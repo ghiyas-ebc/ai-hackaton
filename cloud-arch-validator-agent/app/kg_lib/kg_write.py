@@ -198,6 +198,50 @@ def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
     }
 
 
+def record_gaps(conn, records):
+    """Persist Gap Report records.
+
+    The gaps are the product's own feedback: what real users asked about that
+    the graph could not answer. They used to append to a JSONL file inside the
+    container, which made the one thing nobody can regenerate the one thing
+    with no durability.
+
+    `missing_services` is the triage split and the caller supplies it, because
+    the caller is the only party that knows: it resolved every id against the
+    graph while producing the verdict. Empty means every service named exists
+    and the rules do not cover the pair — a rule to write. Non-empty means a
+    node is missing. Those are different work, and an earlier version tried to
+    infer the distinction in SQL and got it exactly backwards.
+    """
+    if not records:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO kg, public")
+        cur.executemany(
+            """
+            INSERT INTO gap_record (
+                logged_at, request_summary, unresolved_element, reason,
+                missing_services
+            ) VALUES (
+                %(logged_at)s, %(request_summary)s, %(unresolved_element)s,
+                %(reason)s, %(missing_services)s
+            )
+            """,
+            [
+                {
+                    "logged_at": r["logged_at"],
+                    "request_summary": r["request_summary"],
+                    "unresolved_element": r["unresolved_element"],
+                    "reason": r.get("reason"),
+                    "missing_services": list(r.get("missing_services") or []),
+                }
+                for r in records
+            ],
+        )
+    conn.commit()
+    return len(records)
+
+
 def mark_verified(conn, service_id, verified_on):
     """Flip an agent-proposed entry to verified. Requires a date by constraint."""
     with conn.cursor() as cur:

@@ -145,7 +145,40 @@ def generate_verdict_card(edges: str, environment: str = "", data_residency: str
         sla_tier=sla_tier or None,
         stated_needs=stated_needs,
         kg=_KG,
+        gap_sink=_persist_gaps,
     )
+
+
+def _persist_gaps(records):
+    """Store Gap Report records in Postgres, falling back to the JSONL file.
+
+    A gap is logged while answering a user, so a database that is down must not
+    turn a working verdict into an error. The file keeps its old behaviour as
+    the fallback, and the failure is reported rather than swallowed silently —
+    the point of the gap log is that somebody reads it later, and a log that
+    quietly stopped recording is worse than one that never existed.
+    """
+    if not records:
+        return
+    # Which named services the graph does not have. Decided here, where the
+    # loaded graph is in hand, rather than reconstructed later from a formatted
+    # string — an uncovered pair reads "a -> b" and matching that text against
+    # known ids finds the half that exists, which inverts the answer.
+    for record in records:
+        element = record.get("unresolved_element", "")
+        named = [t.strip() for t in element.replace("->", " ").split() if t.strip()]
+        record["missing_services"] = [
+            t for t in named if _KG.resolve(t)[0] is None
+        ]
+    try:
+        with pgconn.connect() as conn:
+            kg_write_module.record_gaps(conn, records)
+    # Broad on purpose: a gap is logged mid-answer, and no storage failure of
+    # any kind should turn a good verdict into an error for the user waiting on
+    # it.
+    except Exception as exc:
+        print(f"gap records fell back to file: {exc}", file=sys.stderr)
+        verdict_card_module._append_gap_records(records)
 
 
 def translate_architecture(edges: str, target_provider: str,
@@ -244,19 +277,29 @@ def search_services(provider: str = "", category: str = "", role: str = "") -> d
     return {"count": len(out), "services": sorted(out, key=lambda s: s["id"])}
 
 
-def export_kg_graph(provider: str = "") -> dict:
-    """Export the whole knowledge graph as nodes and edges, for exploring it.
+def export_kg_graph(provider: str = "", include_edges: bool = False) -> dict:
+    """Describe the shape of the knowledge graph itself — the services in it and
+    the connections the rules permit between them. Not one specific
+    architecture; use validate_architecture for that.
 
-    This describes the KG itself — every service and every connection the
-    rules permit between them — not one specific architecture. Use
-    validate_architecture for a specific design.
+    Edges are omitted by default, and that is usually what you want. There are
+    ~691 of them because they are derived rather than stored: every same-provider
+    pair the rule engine allows. Asking for them returns roughly 190 KB, which
+    answers no question that the counts and per-node degree do not answer better.
+
+    Request them only when the adjacency itself is the answer — "what can Cloud
+    Run actually connect to". When the question is about services rather than
+    connections, `query_services` and `lookup_service` are the right tools.
 
     Args:
         provider: Restrict to 'gcp' or 'azure'. Empty for the full graph.
+        include_edges: Return every derived edge. Large; leave False unless the
+            user needs the adjacency list itself.
 
     Returns:
-        {'nodes': [...], 'edges': [...], 'counts': {...}}. Large — summarize
-        rather than reciting it.
+        {'nodes': [...], 'counts': {...}, 'edges_omitted': bool}, plus 'edges'
+        when include_edges is True. Each node carries 'out_degree', the number
+        of services it may connect to.
     """
     graph = export_module.build_graph(_KG)
     if provider:
@@ -266,7 +309,22 @@ def export_kg_graph(provider: str = "") -> dict:
             e for e in graph["edges"]
             if e.get("source") in keep and e.get("target") in keep
         ]
-    graph["counts"] = {"nodes": len(graph["nodes"]), "edges": len(graph["edges"])}
+    counts = {"nodes": len(graph["nodes"]), "edges": len(graph["edges"])}
+
+    # Degree is computed before the edges are dropped, so the summary still
+    # answers "which services are the most connected" without carrying the list
+    # that answer was derived from.
+    degree = {}
+    for edge in graph["edges"]:
+        degree[edge.get("source")] = degree.get(edge.get("source"), 0) + 1
+    for node in graph["nodes"]:
+        node["out_degree"] = degree.get(node["id"], 0)
+
+    if not include_edges:
+        graph.pop("edges", None)
+
+    graph["counts"] = counts
+    graph["edges_omitted"] = not include_edges
     return graph
 
 

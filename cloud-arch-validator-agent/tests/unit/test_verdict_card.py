@@ -118,8 +118,12 @@ def test_all_proven_card_has_an_explicit_empty_checklist():
 
 
 # --------------------------------------------------------- User Story 4 (P3)
+# These two call the engine directly rather than through `tools`, because they
+# are about the engine's own contract: with no sink supplied it appends the
+# JSONL file and needs no database. `tools` injects a Postgres sink, which is
+# tested at that layer instead — see test_gap_records_persist.py.
 def test_uncovered_finding_appends_a_gap_record(isolated_gap_report):
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
     lines = isolated_gap_report.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
@@ -128,8 +132,8 @@ def test_uncovered_finding_appends_a_gap_record(isolated_gap_report):
 
 
 def test_repeated_gap_is_logged_each_time_not_deduplicated(isolated_gap_report):
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
     lines = isolated_gap_report.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
 

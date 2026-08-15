@@ -33,6 +33,9 @@ import yaml
 _HERE = Path(__file__).resolve().parent
 _APP_KG_LIB = _HERE.parent / "app" / "kg_lib"
 sys.path.insert(0, str(_APP_KG_LIB))
+# migrate.py sits beside this file and is imported, not executed, so seeding a
+# fresh database runs the same migrations production does.
+sys.path.insert(0, str(_HERE))
 
 # The agent's own vendored copy, not the sibling skill's. The skills are being
 # retired by this migration; seeding from a tree that is on its way out would
@@ -434,8 +437,8 @@ def main(argv=None):
                    help="wipe existing KG tables before loading")
     p.add_argument("--dry-run", action="store_true",
                    help="build the rows and report counts without connecting")
-    p.add_argument("--schema", action="store_true", default=True,
-                   help="apply db/schema.sql first (default)")
+    p.add_argument("--no-migrate", action="store_true",
+                   help="assume the schema is already current")
     a = p.parse_args(argv)
 
     rows = build_rows(a.kg_dir)
@@ -447,9 +450,13 @@ def main(argv=None):
     import pgconn
 
     with pgconn.connect() as conn:
-        if a.schema:
-            conn.execute((_HERE / "schema.sql").read_text(encoding="utf-8"))
-            conn.commit()
+        if not a.no_migrate:
+            # An empty database is just one with no migrations applied yet, so
+            # seeding takes the same path production does rather than a
+            # create-everything shortcut only this script knows about.
+            import migrate as migrate_module
+
+            migrate_module.apply(conn)
         counts = apply(conn, rows, replace=a.replace)
     for table in TABLE_ORDER:
         print(f"{table:24s} {counts[table]:4d}")
