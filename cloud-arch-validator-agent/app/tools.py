@@ -1,8 +1,16 @@
-"""Agent-facing tools wrapping the cloud-architecture-validator skills.
+"""Agent-facing tools over the knowledge graph.
 
-Every verdict returned here comes from the vendored rule engine in `kg_lib/`,
-never from the model — that is root invariant #1 of the skill this agent wraps.
-These functions parse arguments and shape output; they do not judge validity.
+Every verdict returned here comes from the rule engine in `kg_lib/`, never from
+the model. That is root invariant #1, and moving the graph into Postgres did not
+touch it: the engine is the same Python it always was, it just receives its rows
+from a database instead of from six files. These functions parse arguments,
+query, and shape output. They do not judge validity.
+
+The tools are grouped at the bottom of this file — `VALIDATION_TOOLS`,
+`EXPLORER_TOOLS`, `CURATOR_TOOLS` — one group per sub-agent. The grouping is the
+real access control in the system: the sub-agent that talks to a rep during a
+client call is not handed a tool that writes to the graph, so no instruction it
+is given can cause a write.
 """
 
 import io
@@ -10,30 +18,42 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-# The vendored scripts import each other by bare name (`import kg`), so their
+# The engine modules import each other by bare name (`import kg`), so their
 # directory has to be on sys.path before they are imported. This is a statement
 # rather than `from . import kg_lib` on purpose: isort would hoist that import
 # above the ones it enables, and the failure would only show at runtime.
 _APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_APP_DIR / "kg_lib"))
-# Add-service helpers are kept in sibling skill scripts. Import them lazily below
-# so agent startup stays independent of authoring-only dependencies.
-_ADD_SCRIPTS_DIR = _APP_DIR.parent.parent / "cloud-architecture-validator-add" / "scripts"
-sys.path.insert(0, str(_ADD_SCRIPTS_DIR))
 
 import check_kg as check_kg_module
 import emit_drawio as emit_drawio_module
 import export_kg_graph as export_module
 import kg as kg_module
+import kg_write as kg_write_module
+import pgconn
 import translate as translate_module
 import validate as validate_module
 import verdict_card as verdict_card_module
 
 from app.renderer import render_report
 
-# The KG is ~46 KB of YAML across six files and never changes at runtime
-# (nothing in the validate path writes to it), so load it once per process.
+# Loaded once per process. The graph is small and read on nearly every tool
+# call, so a query per call would be all latency and no freshness — the only
+# writer is the curator sub-agent in this same process, and it reloads
+# explicitly (`_reload_kg`) after it writes.
 _KG = kg_module.load()
+
+
+def _reload_kg():
+    """Re-read the graph after a write, so the new entry is usable immediately.
+
+    Without this an engineer adds a service, validates an architecture using it
+    in the next breath, and is told UNKNOWN_SERVICE by a process holding a
+    snapshot from startup — which reads like the write silently failed.
+    """
+    global _KG
+    _KG = kg_module.load()
+    return _KG
 
 
 def _parse_edges(edges: str):
@@ -330,94 +350,90 @@ _INIT_STUB = (
 def add_service_to_kg(
     name: str,
     provider: str,
+    category: str = "",
+    tier: str = "",
+    region_scope: str = "",
     network_placement: str = "",
     reachability: str = "",
     roles: list[str] | None = None,
     references_url: str = "",
 ) -> dict:
-    """Add service after human supplies judgment fields.
+    """Add one service to the knowledge graph. Writes to Postgres.
 
-    Safe fields are proposed by existing add-service helpers. Network placement,
-    reachability, and roles are never inferred; caller must collect them from
-    engineer before this tool writes. New entries remain unverified.
+    `network_placement`, `reachability` and `roles` are never inferred and have
+    no defaults — collect them from an engineer before calling. A wrong value in
+    any of the three does not fail loudly; it produces confident wrong verdicts
+    across every pair the service takes part in.
+
+    `category`, `tier` and `region_scope` are also required. They are looked up
+    rather than judged, but the graph cannot store an entry without them, and
+    `region_scope` in particular drives the single-zone and single-region
+    reliability findings.
+
+    The entry lands as `unverified`: live in the graph, not yet signed off.
+
+    Args:
+        name: Product name as the provider writes it, e.g. 'Cloud Run'.
+        provider: 'gcp' or 'azure'.
+        category: e.g. 'compute', 'database', 'storage', 'network'.
+        tier: 'managed', 'self_managed', or 'serverless'.
+        region_scope: 'zonal', 'regional', 'multi_region', or 'global'.
+        network_placement: One of 'serverless_offvpc', 'in_vpc',
+            'managed_service', 'network_fabric', 'connector', 'edge', 'policy'.
+        reachability: How it is reached as a target — 'api_endpoint',
+            'private_ip', 'public_or_private', or 'n_a'.
+        roles: Functional roles, e.g. ['datastore', 'sql'].
+        references_url: Provider documentation URL, recorded as the source.
+
+    Returns:
+        {'written': True, 'entry': {...}, 'note': ...} on success, or
+        {'written': False, 'error': ..., 'field'/'allowed'/'existing': ...}.
     """
-    roles = roles or []
-    required = {
-        "network_placement": network_placement,
-        "reachability": reachability,
-        "roles": roles,
-    }
-    for field, value in required.items():
-        if not value:
-            return {"written": False, "error": "missing_field", "field": field}
-
-    try:
-        from kg_io import find_existing, load_services, write_entry
-        from propose import propose_safe_fields
-        from provenance import build_provenance
-    except ModuleNotFoundError:
-        # Deployed agent package does not include authoring-only sibling scripts.
-        # Keep same non-interactive contract with PyYAML-only local helpers.
-        import yaml
-
-        def load_services(path):
-            with open(path, encoding="utf-8") as handle:
-                return yaml.safe_load(handle) or {"services": []}
-
-        def find_existing(services, service_name, service_provider):
-            return next(
-                (
-                    entry
-                    for entry in services.get("services", [])
-                    if entry.get("name", "").lower() == service_name.lower()
-                    and entry.get("provider", "").lower() == service_provider.lower()
-                ),
-                None,
-            )
-
-        def write_entry(path, services, entry, mode="append"):
-            services.setdefault("services", []).append(entry)
-            with open(path, "w", encoding="utf-8") as handle:
-                yaml.safe_dump(services, handle, sort_keys=False)
-
-        def propose_safe_fields(service_name, service_provider, reference_url=None):
-            return {
-                "category": None,
-                "description": None,
-                "references_url": reference_url,
-                "icon": None,
-                "sources": [reference_url] if reference_url else [],
-            }
-
-        def build_provenance(sources):
-            return {
-                "generated": "cloud-architecture-validator-add",
-                "status": "unverified",
-                "sources": sources or [],
-            }
-
-    kg_path = _APP_DIR / "references" / "kg" / "services.yaml"
-    services = load_services(kg_path)
-    existing = find_existing(services, name, provider)
-    if existing:
-        return {"written": False, "existing": existing}
-
-    proposal = propose_safe_fields(name, provider, references_url or None)
-    entry = {
-        "id": name.lower().replace(" ", "-"),
+    fields = {
         "name": name,
         "provider": provider,
-        "category": proposal.get("category"),
-        "description": proposal.get("description"),
-        "references_url": references_url or proposal.get("references_url"),
-        "icon": proposal.get("icon"),
-        "network_placement": network_placement.split(),
+        "category": category,
+        "tier": tier,
+        "region_scope": region_scope,
+        "network_placement": network_placement,
         "reachability": reachability,
-        "roles": roles,
-        "provenance": build_provenance(proposal.get("sources", [])),
+        "roles": roles or [],
+        "references_url": references_url,
     }
-    write_entry(kg_path, services, entry, mode="append")
-    return {"written": True, "entry": entry}
+    problem = kg_write_module.validate_fields(fields)
+    if problem:
+        return {"written": False, **problem}
+
+    with pgconn.connect() as conn:
+        result = kg_write_module.add_service(
+            conn,
+            fields,
+            sources=[references_url] if references_url else [],
+        )
+    if result.get("written"):
+        _reload_kg()
+    return result
+
+
+def mark_service_verified(service_id: str, verified_on: str) -> dict:
+    """Record that a human has confirmed an agent-proposed entry.
+
+    Only a person who actually checked the three judgment fields should call
+    this, and the date is required rather than defaulted to today — a date the
+    tool invented would assert a review that may not have happened.
+
+    Args:
+        service_id: The id returned by add_service_to_kg.
+        verified_on: ISO date (YYYY-MM-DD) the review took place.
+
+    Returns:
+        {'updated': True, ...} or {'updated': False, 'reason': ...}.
+    """
+    with pgconn.connect() as conn:
+        result = kg_write_module.mark_verified(conn, service_id, verified_on)
+    if result.get("updated"):
+        _reload_kg()
+    return result
 
 
 def propose_equivalence(service_name: str, provider_from: str) -> dict:
@@ -451,16 +467,133 @@ def init_kg_from_catalog(source: str = "", version_tag: str = "") -> dict:
             "version_tag": version_tag}, "message": _INIT_STUB}
 
 
-ALL_TOOLS = [
+def query_services(
+    provider: str = "",
+    category: str = "",
+    tier: str = "",
+    region_scope: str = "",
+    network_placement: str = "",
+    reachability: str = "",
+    roles_all: list[str] | None = None,
+    roles_any: list[str] | None = None,
+    unverified_only: bool = False,
+) -> dict:
+    """Find services by combining typed filters. All conditions must hold.
+
+    This is the query the product wanted for a long time and could not run
+    against a folder of files: "which Azure databases are reachable only over a
+    private IP", "which regional services hold the connector role". These are
+    typed fields, so this is exact matching over a closed set of values — not
+    fuzzy search, and not similarity. Leave a filter empty to skip it.
+
+    Prefer this over search_services when more than one condition matters.
+
+    Args:
+        provider: 'gcp' or 'azure'.
+        category: e.g. 'database', 'compute', 'storage', 'network'.
+        tier: 'managed', 'self_managed', or 'serverless'.
+        region_scope: 'zonal', 'regional', 'multi_region', or 'global'.
+        network_placement: e.g. 'in_vpc', 'serverless_offvpc', 'connector'.
+        reachability: e.g. 'private_ip', 'api_endpoint', 'public_or_private'.
+        roles_all: Every role listed must be held.
+        roles_any: At least one role listed must be held.
+        unverified_only: Only entries no human has signed off on yet.
+
+    Returns:
+        {'count': N, 'services': [...], 'filters': {...}}. An empty result is
+        an answer: no service in the graph matches. It is not a reason to relax
+        a filter and report something adjacent.
+    """
+    roles_all = roles_all or []
+    roles_any = roles_any or []
+    filters = {
+        "provider": provider,
+        "category": category,
+        "tier": tier,
+        "region_scope": region_scope,
+        "network_placement": network_placement,
+        "reachability": reachability,
+        "roles_all": roles_all,
+        "roles_any": roles_any,
+        "unverified_only": unverified_only,
+    }
+
+    scalar = {
+        "provider": provider,
+        "category": category,
+        "tier": tier,
+        "region_scope": region_scope,
+        "network_placement": network_placement,
+        "reachability": reachability,
+    }
+
+    out = []
+    # `ord` ordering, not alphabetical: it is the graph's own precedence, and
+    # the first row of a role query is the one validate.py would insert.
+    for svc_id, svc in _KG.services.items():
+        if any(want and svc.get(field) != want for field, want in scalar.items()):
+            continue
+        held = set(svc.get("roles", []))
+        if roles_all and not set(roles_all) <= held:
+            continue
+        if roles_any and not set(roles_any) & held:
+            continue
+        status = (svc.get("provenance") or {}).get("status")
+        if unverified_only and status != "unverified":
+            continue
+        out.append({
+            "id": svc_id,
+            "name": svc.get("name", svc_id),
+            "provider": svc.get("provider"),
+            "category": svc.get("category"),
+            "tier": svc.get("tier"),
+            "roles": svc.get("roles", []),
+            "network_placement": svc.get("network_placement"),
+            "reachability": svc.get("reachability"),
+            "region_scope": svc.get("region_scope"),
+            "provenance_status": status,
+        })
+    return {"count": len(out), "services": out, "filters": filters}
+
+
+# --------------------------------------------------------------- grouping ----
+# One list per sub-agent. Which tools a sub-agent holds is the boundary that
+# actually enforces the split — an agent cannot be talked into calling a tool it
+# was never given, whereas it can always be talked out of following an
+# instruction. So the read-only agents hold no writer, and the curator holds no
+# verdict tool: a service is either being looked up or being added, and letting
+# one agent do both invites adding a service to make an inconvenient
+# UNKNOWN_SERVICE go away.
+
+VALIDATION_TOOLS = [
     validate_architecture,
     generate_verdict_card,
     translate_architecture,
+    render_ascii_diagram,
+    lookup_service,
+]
+
+EXPLORER_TOOLS = [
     lookup_service,
     search_services,
+    query_services,
     export_kg_graph,
-    render_ascii_diagram,
     check_kg_health,
+]
+
+CURATOR_TOOLS = [
+    lookup_service,
+    query_services,
     add_service_to_kg,
+    mark_service_verified,
     propose_equivalence,
     init_kg_from_catalog,
 ]
+
+# Every tool any agent can reach, de-duplicated. Used by tests asserting on the
+# exposure surface — notably that render_drawio_diagram is not in it, because
+# `--embed-icons` is a known-broken path and a broken diagram in front of a
+# client is worse than no diagram.
+ALL_TOOLS = list(
+    dict.fromkeys(VALIDATION_TOOLS + EXPLORER_TOOLS + CURATOR_TOOLS)
+)
