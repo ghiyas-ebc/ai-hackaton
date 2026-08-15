@@ -29,5 +29,49 @@ services:
       timeout: 3s
       retries: 15
 
+  # MCP Toolbox for Databases: an MCP server in front of the same Postgres, so
+  # an MCP client can inspect the graph directly. Read-only by construction —
+  # every tool in db/toolbox/tools.yaml is a fixed statement, and there is no
+  # execute-SQL tool, for the reason written at the top of that file.
+  #
+  # Nothing in the agent depends on this. It is a window onto the graph, not a
+  # part of the validation path, and `docker compose up -d db` alone is still
+  # enough to run the agent and the tests.
+  toolbox:
+    image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.9.0
+    container_name: cav-toolbox
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - --config=/config/tools.yaml
+      # Defaults to 127.0.0.1, which inside a container means nothing outside
+      # it can connect. This is the one flag that is not optional.
+      - --address=0.0.0.0
+      - --port=5000
+      - --log-level=INFO
+    environment:
+      # `db` is the compose service name; the toolbox reaches Postgres over the
+      # internal network, not through the published port.
+      TOOLBOX_PG_HOST: db
+      TOOLBOX_PG_PORT: "5432"
+      TOOLBOX_PG_DATABASE: cav
+      TOOLBOX_PG_USER: cav
+      TOOLBOX_PG_PASSWORD: cav
+      # sslmode is not here: `${VAR}` substitution does not reach nested maps
+      # in tools.yaml, so it is hardcoded in that file with the reason beside
+      # it. Setting it here would look like it works and would not.
+    volumes:
+      - ./db/toolbox:/config:ro
+    ports:
+      # 5000 on the host is taken by macOS AirPlay Receiver, and so is 7000.
+      # The container still listens on 5000; only the published port differs.
+      - "5050:5000"
+    healthcheck:
+      test: ["CMD", "/toolbox", "invoke", "--help"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   cav-pgdata:

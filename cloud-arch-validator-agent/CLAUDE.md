@@ -29,6 +29,29 @@ docker compose up -d db
 uv run python db/seed_from_yaml.py
 ```
 
+Use `docker-compose` (hyphen) if `docker compose` reports an unknown command —
+the v2 plugin symlink is broken on at least one machine here.
+
+### Inspecting the graph over MCP
+
+```bash
+docker compose up -d toolbox     # MCP Toolbox for Databases, on host port 5050
+```
+
+Eight read-only tools over the same Postgres, for pointing an MCP client at the
+graph: search services by typed properties, read the L1 rules in evaluation
+order, list what is pending human sign-off. `db/toolbox/tools.yaml` defines
+them.
+
+Nothing in the agent depends on it, and it deliberately has **no execute-SQL
+tool** — `--prebuilt postgres` would have provided one and was not used. A model
+that can run `SELECT` against `connectivity_rule` can compose its own answer
+about whether two services may connect, citing real rows, and that answer is not
+a verdict. Keep the tools here fixed statements over closed parameter sets. If
+you want ad-hoc SQL, run `psql`; a person at a prompt is not the risk.
+
+Host port is 5050 because macOS AirPlay Receiver holds 5000 and 7000.
+
 `CAV_PG_DSN` is the only setting that knows where the database is; pointing it
 at Cloud SQL is the whole of moving there. `CAV_KG_BACKEND=local` falls back to
 the YAML in `app/references/kg/` — no longer authoritative, kept because it

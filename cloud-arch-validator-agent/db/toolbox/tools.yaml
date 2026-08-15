@@ -1,0 +1,255 @@
+# MCP Toolbox for Databases — read-only access to the knowledge graph.
+#
+# What this is for: letting an MCP client (Claude Desktop, an IDE, a notebook)
+# inspect the graph directly. Answering "what does the graph actually say about
+# Azure databases" without writing a script, and checking what the agent is
+# reading when a verdict looks wrong.
+#
+# ---------------------------------------------------------------------------
+# Why these are hand-written tools and not `--prebuilt postgres`
+#
+# The prebuilt Postgres toolset includes a generic execute-SQL tool. Handing
+# that to a model connected to this database would be a way around the rule
+# engine: the whole product rests on verdicts coming from validate.py and never
+# from the model, and a model that can run `SELECT` against connectivity_rule
+# can compose its own answer about whether two services may connect. It would
+# be plausible, it would cite real rows, and it would not be a verdict — it
+# would be the model's reading of the inputs to one.
+#
+# So every tool below is a fixed statement over a closed parameter set. None of
+# them takes SQL. None of them writes. They answer questions about what is in
+# the graph, which is a different question from what the graph implies, and the
+# second one still belongs to the engine.
+#
+# If you do want ad-hoc SQL while debugging, run `psql` against the same
+# database rather than adding an execute-SQL tool here — a person at a prompt
+# is not the risk being managed.
+#
+# ---------------------------------------------------------------------------
+# Format note: this is the flat, one-document-per-object schema (`kind:` on
+# each). Older examples online use a nested sources:/tools:/toolsets: mapping;
+# `toolbox migrate` converts those to this.
+
+kind: source
+name: cav-kg
+type: postgres
+host: ${TOOLBOX_PG_HOST:db}
+port: ${TOOLBOX_PG_PORT:5432}
+database: ${TOOLBOX_PG_DATABASE:cav}
+user: ${TOOLBOX_PG_USER:cav}
+password: ${TOOLBOX_PG_PASSWORD:cav}
+queryParams:
+  # The toolbox negotiates TLS by default and the local Postgres serves none,
+  # so without this the connection is refused — and it surfaces as "password
+  # authentication failed", which sends you looking at credentials that were
+  # never the problem.
+  #
+  # Hardcoded, unlike every field above it. `${VAR}` substitution applies to
+  # the top-level scalars of a source and does not reach into this nested map:
+  # the literal `${...}` is handed to the driver as the sslmode value, whether
+  # or not the variable is set. Edit this line to change it.
+  #
+  # `disable` is correct for the compose database, which is reachable only on
+  # the internal network. Use `require` when this points at Cloud SQL or
+  # anything else off this host.
+  sslmode: disable
+
+---
+# Empty-string-means-any is deliberate. Toolbox parameters are required, and
+# several of these filters are optional in the question being asked ("all Azure
+# databases" vs "all databases"), so each filter short-circuits on ''.
+kind: tool
+name: search-services
+type: postgres-sql
+source: cav-kg
+description: >-
+  Find services in the knowledge graph by their typed properties. All filters
+  combine with AND; pass an empty string for any filter you do not want to
+  apply. These are exact matches over closed value sets, not fuzzy search.
+  An empty result means nothing in the graph matches, which is an answer.
+parameters:
+  - name: provider
+    type: string
+    description: "'gcp' or 'azure'. Empty for both."
+  - name: category
+    type: string
+    description: "e.g. 'database', 'compute', 'storage', 'network'. Empty for all."
+  - name: reachability
+    type: string
+    description: >-
+      How the service is reached as a target: 'api_endpoint', 'private_ip',
+      'public_or_private', 'n_a'. Empty for all.
+  - name: network_placement
+    type: string
+    description: >-
+      Where it sits relative to the customer VPC: 'serverless_offvpc',
+      'in_vpc', 'managed_service', 'network_fabric', 'connector', 'edge',
+      'policy'. Empty for all.
+  - name: role
+    type: string
+    description: "A single functional role the service must hold, e.g. 'datastore'. Empty for all."
+statement: |
+  SELECT id, name, provider, category, tier, reachability,
+         network_placement, region_scope, roles, prov_status
+  FROM kg.service_search
+  WHERE ($1 = '' OR provider = $1)
+    AND ($2 = '' OR category = $2)
+    AND ($3 = '' OR reachability = $3)
+    AND ($4 = '' OR network_placement = $4)
+    AND ($5 = '' OR $5 = ANY(roles))
+  ORDER BY ord;
+
+---
+kind: tool
+name: get-service
+type: postgres-sql
+source: cav-kg
+description: >-
+  Look up one service by its id, including its roles, provenance status and
+  the authored note explaining anything unusual about the entry. Returns no
+  rows for an unknown id — that is UNKNOWN_SERVICE, not a reason to substitute
+  a similar-sounding service.
+parameters:
+  - name: service_id
+    type: string
+    description: "The service id, e.g. 'cloud-run'."
+statement: |
+  SELECT s.id, s.name, s.provider, s.category, s.tier,
+         s.network_placement, s.reachability, s.region_scope,
+         s.extras, s.prov_generated, s.prov_status, s.prov_verified,
+         s.rationale,
+         COALESCE((SELECT array_agg(r.role ORDER BY r.ord)
+                   FROM kg.service_role r WHERE r.service_id = s.id),
+                  ARRAY[]::text[]) AS roles
+  FROM kg.service s
+  WHERE s.id = $1;
+
+---
+kind: tool
+name: list-connectivity-rules
+type: postgres-sql
+source: cav-kg
+description: >-
+  The Layer 1 rules in evaluation order. Order is semantics, not presentation:
+  first match wins, so a rule only applies when no earlier rule matched. Use
+  this to see why the engine reached a connectivity verdict, not to decide one.
+parameters: []
+statement: |
+  SELECT seq, id, verdict, severity, needs_role, relationship,
+         when_clause, message, rationale
+  FROM kg.connectivity_rule
+  ORDER BY seq;
+
+---
+kind: tool
+name: list-architecture-rules
+type: postgres-sql
+source: cav-kg
+description: >-
+  The Layer 2-8 rules, optionally for one layer. L7 is empty by design: it
+  would need node properties the graph does not carry, so it reports UNCOVERED
+  rather than inferring them.
+parameters:
+  - name: layer
+    type: string
+    description: "Layer id such as 'L2' or 'L5'. Empty for every layer."
+statement: |
+  SELECT r.layer_id, l.title AS layer_title, l.is_gate, l.status AS layer_status,
+         r.id, r.enabled, r.severity, r.title, r.message, r.remediation,
+         r.applies_when, r.threshold, r.rationale
+  FROM kg.architecture_rule r
+  JOIN kg.architecture_layer l ON l.id = r.layer_id
+  WHERE ($1 = '' OR r.layer_id = $1)
+  ORDER BY l.ord, r.ord;
+
+---
+kind: tool
+name: find-equivalents
+type: postgres-sql
+source: cav-kg
+description: >-
+  Recorded cross-provider equivalents for a service, in both directions. No
+  rows can mean two different things: no equivalent has been recorded, or the
+  service holds a role the translator regenerates at the target instead of
+  mapping — connectors have no equivalents by design, and reading that absence
+  as vendor lock-in is a mistake.
+parameters:
+  - name: service_id
+    type: string
+    description: "The service id to find equivalents for, e.g. 'cloud-run'."
+statement: |
+  SELECT e.source_id, t.target_id, t.level, t.when_clause, t.caveats,
+         e.selection_criteria
+  FROM kg.equivalence e
+  JOIN kg.equivalence_target t ON t.equivalence_id = e.id
+  WHERE e.source_id = $1 OR t.target_id = $1
+  ORDER BY t.ord;
+
+---
+kind: tool
+name: list-exclusive-alternatives
+type: postgres-sql
+source: cav-kg
+description: >-
+  Pairs of services that are alternatives to each other rather than components
+  used together, with the question that decides between them. An architecture
+  naming both sides of a pair cannot be built as described.
+parameters: []
+statement: |
+  SELECT a_id, b_id, decision
+  FROM kg.service_alternative
+  ORDER BY id;
+
+---
+kind: tool
+name: list-unverified-services
+type: postgres-sql
+source: cav-kg
+description: >-
+  Entries an agent proposed that no human has signed off. These are live in
+  the graph and being used for verdicts right now. The three fields nobody can
+  look up — network_placement, reachability, roles — are unconfirmed on each
+  of them, and a wrong reachability fails silently across roughly twenty pairs.
+parameters: []
+statement: |
+  SELECT id, name, provider, network_placement, reachability,
+         prov_generated, prov_sources, created_at
+  FROM kg.service
+  WHERE prov_status = 'unverified'
+  ORDER BY created_at;
+
+---
+kind: tool
+name: kg-overview
+type: postgres-sql
+source: cav-kg
+description: >-
+  Row counts per table plus the provenance breakdown. A quick answer to "what
+  is actually in this graph" and whether anything is pending review.
+parameters: []
+statement: |
+  SELECT
+    (SELECT count(*) FROM kg.service)                                AS services,
+    (SELECT count(*) FROM kg.service WHERE provider = 'gcp')         AS gcp_services,
+    (SELECT count(*) FROM kg.service WHERE provider = 'azure')       AS azure_services,
+    (SELECT count(*) FROM kg.service WHERE prov_status = 'manual')   AS provenance_manual,
+    (SELECT count(*) FROM kg.service WHERE prov_status = 'verified') AS provenance_verified,
+    (SELECT count(*) FROM kg.service WHERE prov_status='unverified') AS provenance_unverified,
+    (SELECT count(*) FROM kg.connectivity_rule)                      AS connectivity_rules,
+    (SELECT count(*) FROM kg.architecture_rule)                      AS architecture_rules,
+    (SELECT count(*) FROM kg.architecture_layer)                     AS layers,
+    (SELECT count(*) FROM kg.equivalence_target)                     AS equivalence_targets,
+    (SELECT count(*) FROM kg.service_alternative)                    AS exclusive_pairs;
+
+---
+kind: toolset
+name: cav-kg-readonly
+tools:
+  - search-services
+  - get-service
+  - list-connectivity-rules
+  - list-architecture-rules
+  - find-equivalents
+  - list-exclusive-alternatives
+  - list-unverified-services
+  - kg-overview
