@@ -2,17 +2,85 @@
 
 ## What this project is
 
-An ADK agent front-end for the four `cloud-architecture-validator-*` skills in
-the parent repository. It exposes their scripts as ten tools and lets a
-salesperson or presales engineer describe an architecture in prose instead of
-assembling a `--edges "a>b,b>c"` string by hand.
+A multi-agent ADK application over a knowledge graph of cloud services stored in
+Postgres. It lets a salesperson or presales engineer describe an architecture in
+prose instead of assembling a `--edges "a>b,b>c"` string by hand.
+
+This used to be a front-end for four Claude Skills that read YAML files. Both
+halves of that changed: the graph moved into Postgres (parent repo's D24) and
+the single agent became a coordinator plus three specialists (D25). The skill
+directories are deleted (D27) — one of them had gone two decisions stale while
+staying invocable.
+
+### Layout
+
+| Path | What it is |
+|------|------------|
+| `app/agent.py` | Coordinator. No tools — it routes and nothing else. |
+| `app/sub_agents/` | `validator`, `explorer`, `curator`. One job each. |
+| `app/tools.py` | Tool implementations and the per-agent groupings. |
+| `app/kg_lib/` | The rule engine, plus `kg_pg.py` / `kg_write.py` / `pgconn.py`. |
+| `db/migrations/` | Numbered schema migrations, applied in order. |
+| `db/migrate.py` | Applies pending ones; refuses edits to applied files. |
+| `db/seed_from_yaml.py` | Rebuild a database from the export. |
+| `db/export_to_yaml.py` | Postgres → YAML. The only thing that writes it. |
+
+### Getting a database
+
+```bash
+docker compose up -d db
+uv run python db/migrate.py          # schema
+uv run python db/seed_from_yaml.py   # data
+```
+
+Changing the schema means adding `db/migrations/NNNN_name.sql`, never editing an
+applied one — the runner checksums them and refuses. Migrations run one
+transaction each, so a failure leaves nothing behind.
+
+Use `docker-compose` (hyphen) if `docker compose` reports an unknown command —
+the v2 plugin symlink is broken on at least one machine here.
+
+### Inspecting the graph over MCP
+
+```bash
+docker compose up -d toolbox     # MCP Toolbox for Databases, on host port 5050
+```
+
+Eight read-only tools over the same Postgres, for pointing an MCP client at the
+graph: search services by typed properties, read the L1 rules in evaluation
+order, list what is pending human sign-off. `db/toolbox/tools.yaml` defines
+them.
+
+Nothing in the agent depends on it, and it deliberately has **no execute-SQL
+tool** — `--prebuilt postgres` would have provided one and was not used. A model
+that can run `SELECT` against `connectivity_rule` can compose its own answer
+about whether two services may connect, citing real rows, and that answer is not
+a verdict. Keep the tools here fixed statements over closed parameter sets. If
+you want ad-hoc SQL, run `psql`; a person at a prompt is not the risk.
+
+Host port is 5050 because macOS AirPlay Receiver holds 5000 and 7000.
+
+`CAV_PG_DSN` is the only setting that knows where the database is; pointing it
+at Cloud SQL is the whole of moving there. `CAV_KG_BACKEND=local` reads the
+generated YAML in `app/references/kg/` instead — never authoritative, but kept
+honest by the drift test, so the fallback answers what the database would.
+
+### Which tools an agent holds is the boundary
+
+The read-only agents hold no writer and the curator holds no verdict tool. This
+is not decoration: every one of those rules is also a sentence in a prompt, and
+a prompt can be argued with, while a tool the agent was never handed cannot be
+called. `tests/unit/test_agent_boundaries.py` asserts it. If you add a tool,
+add it to a group in `app/tools.py` — `ALL_TOOLS` is derived from the groups,
+so a tool that belongs to no agent is exposed to nobody.
 
 `generate_verdict_card` (in `app/kg_lib/verdict_card.py`) is the primary tool
 for a live sales conversation: it wraps `validate_architecture`'s output into
 a Verdict Card — one difficulty label, every finding tagged with an evidence
 tier (`Proven` / `Theoretically Possible` / `Requires Deep Review`), optional
 tech-mismatch detection, an engineer checklist, and automatic Gap Report
-logging to `app/references/gap_report.jsonl` for anything uncovered. See
+logging to `kg.gap_record` for anything uncovered — the JSONL file remains only
+as the fallback when the database is unreachable. See
 `specs/001-verdict-card/` in the parent repo for the full design. Like
 everything else here, it is a pure transformation over the rule engine's
 output — no tier, score, or checklist item is decided by the model.
@@ -25,47 +93,65 @@ decides whether a connection is valid, stop — that defeats the product.
 
 `UNCOVERED` and `UNKNOWN_SERVICE` are correct answers, not bugs to route around.
 
-### Vendored knowledge graph
+### Postgres is the source of truth; the YAML is its export
 
-| Path | Origin |
-|------|--------|
-| `app/kg_lib/` | `create-architect/scripts/` + the three sibling skills' scripts |
-| `app/references/` | `create-architect/references/` |
-| `app/evals/` | `create-architect/evals/` |
+`app/references/kg/*.yaml` is generated by `db/export_to_yaml.py` and carries a
+banner saying so. Do not edit it — change the graph through the curator agent or
+SQL, then re-run the export and commit what it writes.
 
-Copied verbatim so the agent is self-contained and deployable in a container.
-One edit was needed: `export_kg_graph.py` no longer resolves a cross-skill
-sibling path. **Do not reformat anything under `app/kg_lib/` or `app/evals/`** —
-they are excluded from ruff precisely so a diff against the skills shows real
-drift rather than style noise. Fix bugs in the skills first, then re-copy.
+```bash
+uv run python db/export_to_yaml.py           # after any change to the graph
+uv run python db/export_to_yaml.py --check   # prints the drifted lines
+```
 
-The vendored layout mirrors the skill's own, which is why `kg.py` (`KG_DIR =
-../references/kg`) and `check_kg.py` (`../evals`) needed no changes.
+`tests/unit/test_kg_export_drift.py` fails when the two disagree. Keeping the
+export is what preserves the things the graph lost by leaving git: a reviewable
+diff, a restore path, and an offline backend. See D27 in the parent repo.
 
-Those scripts import each other by bare name (`import kg`). `app/tools.py` puts
+### The rule engine was not rewritten for Postgres
+
+`kg_pg.py` returns the same `KnowledgeGraph` object the YAML loader did, so
+`validate.py`, `translate.py`, `verdict_card.py` and `check_kg.py` never learn
+where their rows came from. That is what carries invariant #1 through the
+storage change: the engine still decides every verdict, in the same Python, and
+the 37/37 regression fixture passes against Postgres unchanged.
+
+Keep it that way. If a change would make the engine issue SQL, the verdict logic
+has started living in two places.
+
+**Do not reformat anything under `app/kg_lib/` or `app/evals/`** — they are
+excluded from ruff so a diff shows real drift rather than style noise.
+
+Those modules import each other by bare name (`import kg`). `app/tools.py` puts
 `app/kg_lib/` on `sys.path` with a plain statement before importing them —
 deliberately not `from . import kg_lib`, which isort would hoist above the
-imports it enables, failing only at runtime.
+imports it enables, failing only at runtime. That is why `app/tools.py` carries
+a per-file `E402` ignore.
 
-### Two tools are not implemented
+### One tool is not implemented
 
-`add_service_to_kg` and `init_kg_from_catalog` return `{'implemented': False}`
-with an explanation. The underlying skills are design stubs: `-add` still needs
-the human gate over `network_placement` / `reachability` / `roles` (a wrong
-`reachability` fails silently across ~20 pairs and `check_kg.py` reports clean),
-and `-init` has no source URL chosen. Building either means resolving that in
-the parent repo first.
+`init_kg_from_catalog` returns `{'implemented': False}` with an explanation — no
+source catalog URL has been chosen (parent repo, open questions). `add_service_
+to_kg` now works and writes to Postgres, gated on an engineer supplying the
+three judgment fields.
 
 ### Checks
 
 ```bash
-uv run pytest tests/unit tests/integration   # unit tests cover all 10 tools
-uv run ruff check app tests
+uv run pytest tests/unit tests/integration
+uv run ruff check app tests db
 ```
 
 `tests/unit/test_tools.py` asserts on rule-engine output, which is deterministic
 and therefore belongs in pytest rather than eval. It includes the KG's own gate:
 clean integrity and 37/37 regression.
+
+Tests needing Postgres skip when `CAV_PG_DSN` does not answer. Two things follow
+from the graph being writable rather than a fixed file, and both bit once
+already: do not assert exact service counts (a legitimate write breaks the
+build), and do not assert the health report is blank (an entry pending human
+sign-off is *supposed* to hold it open, and a test demanding silence pushes
+whoever hits it toward clearing the flag instead of doing the review).
 
 Load `.env` before running anything (`set -a; . ./.env; set +a`) — without it
 the model client fails with "No API key was provided."

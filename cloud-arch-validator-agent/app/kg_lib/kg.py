@@ -1,17 +1,21 @@
 """
 Knowledge graph loader.
 
-Default: local YAML files under ../references/kg/. No network, no credentials,
-no cloud account required — which matters because this skill is also used to
-demo Azure architectures, and requiring an active GCP account for that makes no
-sense.
+Default: Postgres, reached over a DSN in `CAV_PG_DSN`. The graph outgrew what a
+folder of YAML could do — not in size, but in access: several agents now read
+it and one of them writes to it, which a file cannot arbitrate. Every backend
+below returns the same `KnowledgeGraph` object, so `validate.py` and the rest of
+the rule engine never learn where the rows came from.
 
-A BigQuery backend sits behind the same interface for later, once the KG grows
-large enough to need multi-editor governance. Enable it with:
-    export CAV_KG_BACKEND=bigquery
-    export CAV_BQ_PROJECT=<project-id>
-While the local backend is sufficient, leave it off — it only adds a failure
-point with no benefit.
+    export CAV_KG_BACKEND=postgres   # default
+    export CAV_PG_DSN=postgresql://cav:cav@localhost:5432/cav
+
+The YAML loader survives as `CAV_KG_BACKEND=local`. It is no longer the source
+of truth — `db/seed_from_yaml.py` moved that into Postgres — but it stays
+because it needs no database, which makes it the reference the migration is
+tested against and a working fallback when the DSN is unreachable.
+
+The BigQuery stub predates both and remains unimplemented.
 """
 
 import os
@@ -163,10 +167,25 @@ def _read(name):
 
 
 def load(backend=None):
-    backend = backend or os.environ.get("CAV_KG_BACKEND", "local")
+    backend = backend or os.environ.get("CAV_KG_BACKEND", "postgres")
     if backend == "bigquery":
         return _load_bigquery()
-    return _load_local()
+    if backend == "local":
+        return _load_local()
+    if backend != "postgres":
+        raise ValueError(
+            f"Unknown CAV_KG_BACKEND {backend!r}. Expected postgres, local, or "
+            "bigquery."
+        )
+    return _load_postgres()
+
+
+def _load_postgres():
+    # Imported here, not at module scope: the YAML backend must keep working on
+    # a machine with no psycopg installed and no database running.
+    import kg_pg
+
+    return kg_pg.load()
 
 
 def _load_local():

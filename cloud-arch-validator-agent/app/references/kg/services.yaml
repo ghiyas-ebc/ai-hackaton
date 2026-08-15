@@ -1,555 +1,735 @@
-# Node table — one entry per service, across all providers.
+# GENERATED FILE — do not edit.
 #
+# Written by db/export_to_yaml.py from the Postgres knowledge graph, which
+# is the source of truth. An edit here is overwritten by the next export,
+# and tests/unit/test_kg_export_drift.py fails before that anyway.
+#
+# To change the graph: use the curator agent, or SQL, then re-run the
+# export. To rebuild a database from this file: db/seed_from_yaml.py.
+#
+# Node table — one entry per service, across all providers.
 # Connection validity is NOT stored here and is not stored as a list of pairs.
 # It is derived from the properties below by connectivity-rules.yaml. Adding a
 # service means adding one entry, not adding N pairs.
-#
 # Properties that drive validation:
-#
 # network_placement — where this workload/service lives relative to the customer VPC
-#   serverless_offvpc : runs outside the customer VPC by default
-#   in_vpc            : the instance/node sits inside the customer VPC
-#   managed_service   : a managed service reached via an endpoint (not a "place")
-#   network_fabric    : the private network itself
-#   connector         : a component bridging two network contexts
-#   edge              : the entry point for traffic from the internet
-#   policy            : not a traffic node; attaches to another node
-#
+# serverless_offvpc : runs outside the customer VPC by default
+# in_vpc            : the instance/node sits inside the customer VPC
+# managed_service   : a managed service reached via an endpoint (not a "place")
+# network_fabric    : the private network itself
+# connector         : a component bridging two network contexts
+# edge              : the entry point for traffic from the internet
+# policy            : not a traffic node; attaches to another node
 # reachability — how this service is reached AS A TARGET
-#   api_endpoint      : global API endpoint, IAM-authorized, needs no special network path
-#   private_ip        : only from inside a private network
-#   public_or_private : both options exist; the public path works but is not the safe default
-#   n_a               : not reached as a traffic target
-#
+# api_endpoint      : global API endpoint, IAM-authorized, needs no special network path
+# private_ip        : only from inside a private network
+# public_or_private : both options exist; the public path works but is not the safe default
+# n_a               : not reached as a traffic target
 # roles — functional capabilities; used by rules and by cross-provider translation.
-#   The same role can be held by services from different providers — that is what
-#   lets intermediaries translate correctly along with everything else.
-#
+# The same role can be held by services from different providers — that is what
+# lets intermediaries translate correctly along with everything else.
 # provenance — who put this entry here and whether a human vouched for the three
-#   properties above that a lookup cannot answer (network_placement, reachability,
-#   roles). This does NOT drive validation; it drives check_kg.py's refusal to
-#   pass a KG containing entries nobody has signed off on. See D21.
-#
-#   generated — manual | cloud-architecture-validator-add | cloud-architecture-validator-init
-#   status    — manual     : a person hand-wrote the entry; no agent was involved,
-#                            so the judgment fields are human by construction
-#               unverified : an agent proposed it, no human has confirmed the
-#                            judgment fields yet. check_kg.py FAILS on this.
-#               verified   : an agent proposed it and a human confirmed it;
-#                            requires a `verified:` date saying when
-#   sources   — optional list of URLs the agent-verifiable fields came from
-#   verified  — YYYY-MM-DD, required when status is `verified`
-#   stale_after — optional YYYY-MM-DD; past that date check_kg.py warns (not fails)
-#
-#   Every entry below is `status: manual` because all 45 predate -add/-init and
-#   were hand-written. That is a statement about their origin, not a claim that
-#   anyone re-reviewed them on a particular date — which is exactly why `manual`
-#   is a separate status from `verified` rather than a backfilled date.
+# properties above that a lookup cannot answer (network_placement, reachability,
+# roles). This does NOT drive validation; it drives check_kg.py's refusal to
+# pass a KG containing entries nobody has signed off on. See D21.
+# generated — manual | cloud-architecture-validator-add | cloud-architecture-validator-init
+# status    — manual     : a person hand-wrote the entry; no agent was involved,
+# so the judgment fields are human by construction
+# unverified : an agent proposed it, no human has confirmed the
+# judgment fields yet. check_kg.py FAILS on this.
+# verified   : an agent proposed it and a human confirmed it;
+# requires a `verified:` date saying when
+# sources   — optional list of URLs the agent-verifiable fields came from
+# verified  — YYYY-MM-DD, required when status is `verified`
+# stale_after — optional YYYY-MM-DD; past that date check_kg.py warns (not fails)
+# Every entry below is `status: manual` because all 45 predate -add/-init and
+# were hand-written. That is a statement about their origin, not a claim that
+# anyone re-reviewed them on a particular date — which is exactly why `manual`
+# is a separate status from `verified` rather than a backfilled date.
 
 services:
+- id: cloud-run
+  name: Cloud Run
+  provider: gcp
+  category: compute
+  tier: serverless
+  roles:
+  - compute
+  - container_runtime
+  - http_target
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-functions
+  name: Cloud Functions
+  provider: gcp
+  category: compute
+  tier: serverless
+  roles:
+  - compute
+  - function_runtime
+  - http_target
+  - event_consumer
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: gke-autopilot
+  name: GKE Autopilot
+  provider: gcp
+  category: compute
+  tier: managed
+  roles:
+  - compute
+  - kubernetes
+  - container_runtime
+  - http_target
+  network_placement: in_vpc
+  reachability: private_ip
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: compute-engine
+  name: Compute Engine
+  provider: gcp
+  category: compute
+  tier: self_managed
+  roles:
+  - compute
+  - vm
+  - http_target
+  network_placement: in_vpc
+  reachability: private_ip
+  region_scope: zonal
+  provenance:
+    generated: manual
+    status: manual
+- id: app-engine
+  name: App Engine
+  provider: gcp
+  category: compute
+  tier: managed
+  roles:
+  - compute
+  - paas_app_host
+  - http_target
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-sql
+  name: Cloud SQL
+  provider: gcp
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - relational_db
+  network_placement: managed_service
+  reachability: public_or_private
+  region_scope: regional
+  engines:
+  - mysql
+  - postgresql
+  - sqlserver
+  provenance:
+    generated: manual
+    status: manual
+- id: spanner
+  name: Cloud Spanner
+  provider: gcp
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - relational_db
+  - global_scale_db
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: multi_region
+  provenance:
+    generated: manual
+    status: manual
+- id: firestore
+  name: Firestore
+  provider: gcp
+  category: database
+  tier: serverless
+  roles:
+  - datastore
+  - document_db
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: multi_region
+  provenance:
+    generated: manual
+    status: manual
+- id: bigtable
+  name: Cloud Bigtable
+  provider: gcp
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - wide_column_db
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: memorystore
+  name: Memorystore
+  provider: gcp
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - cache
+  network_placement: managed_service
+  reachability: private_ip
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-storage
+  name: Cloud Storage
+  provider: gcp
+  category: storage
+  tier: managed
+  roles:
+  - datastore
+  - object_store
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: multi_region
+  provenance:
+    generated: manual
+    status: manual
+- id: vpc
+  name: VPC Network
+  provider: gcp
+  category: networking
+  tier: self_managed
+  roles:
+  - network_fabric
+  network_placement: network_fabric
+  reachability: private_ip
+  region_scope: global
+  provenance:
+    generated: manual
+    status: manual
+- id: serverless-vpc-access
+  name: Serverless VPC Access
+  provider: gcp
+  category: networking
+  tier: managed
+  roles:
+  - connector
+  - serverless_vpc_connector
+  network_placement: connector
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-sql-auth-proxy
+  name: Cloud SQL Auth Proxy
+  provider: gcp
+  category: networking
+  tier: self_managed
+  roles:
+  - connector
+  - db_auth_proxy
+  network_placement: connector
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: private-service-connect
+  name: Private Service Connect
+  provider: gcp
+  category: networking
+  tier: managed
+  roles:
+  - connector
+  - private_endpoint
+  network_placement: connector
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-load-balancing
+  name: Cloud Load Balancing
+  provider: gcp
+  category: networking
+  tier: managed
+  roles:
+  - edge_entry
+  - load_balancer_l4
+  - load_balancer_l7
+  - path_routing
+  network_placement: edge
+  reachability: public_or_private
+  region_scope: global
+  provenance:
+    generated: manual
+    status: manual
+- id: cloud-armor
+  name: Cloud Armor
+  provider: gcp
+  category: security
+  tier: managed
+  roles:
+  - policy
+  - waf
+  - ddos_protection
+  network_placement: policy
+  reachability: n_a
+  region_scope: global
+  attaches_to_roles:
+  - load_balancer_l7
+  - edge_entry
+  provenance:
+    generated: manual
+    status: manual
+- id: pubsub
+  name: Pub/Sub
+  provider: gcp
+  category: integration
+  tier: serverless
+  roles:
+  - messaging
+  - event_router
+  - message_queue
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: global
+  provenance:
+    generated: manual
+    status: manual
+- id: dataflow
+  name: Dataflow
+  provider: gcp
+  category: analytics
+  tier: managed
+  roles:
+  - data_processing
+  - batch_etl
+  - stream_processing
+  network_placement: in_vpc
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: bigquery
+  name: BigQuery
+  provider: gcp
+  category: analytics
+  tier: serverless
+  roles:
+  - datastore
+  - data_warehouse
+  - analytics_sink
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: multi_region
+  provenance:
+    generated: manual
+    status: manual
+- id: vertex-ai
+  name: Vertex AI
+  provider: gcp
+  category: ai_ml
+  tier: managed
+  roles:
+  - ml_platform
+  - compute
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: secret-manager
+  name: Secret Manager
+  provider: gcp
+  category: security
+  tier: managed
+  roles:
+  - secret_store
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: global
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-container-apps
+  name: Azure Container Apps
+  provider: azure
+  category: compute
+  tier: serverless
+  roles:
+  - compute
+  - container_runtime
+  - http_target
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-functions
+  name: Azure Functions
+  provider: azure
+  category: compute
+  tier: serverless
+  roles:
+  - compute
+  - function_runtime
+  - http_target
+  - event_consumer
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: aks
+  name: Azure Kubernetes Service
+  provider: azure
+  category: compute
+  tier: managed
+  roles:
+  - compute
+  - kubernetes
+  - container_runtime
+  - http_target
+  network_placement: in_vpc
+  reachability: private_ip
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-vm
+  name: Azure Virtual Machines
+  provider: azure
+  category: compute
+  tier: self_managed
+  roles:
+  - compute
+  - vm
+  - http_target
+  network_placement: in_vpc
+  reachability: private_ip
+  region_scope: zonal
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-app-service
+  name: Azure App Service
+  provider: azure
+  category: compute
+  tier: managed
+  roles:
+  - compute
+  - paas_app_host
+  - http_target
+  network_placement: serverless_offvpc
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-sql-database
+  name: Azure SQL Database
+  provider: azure
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - relational_db
+  network_placement: managed_service
+  reachability: public_or_private
+  region_scope: regional
+  engines:
+  - sqlserver
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-sql-hyperscale
+  name: Azure SQL Hyperscale
+  provider: azure
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - relational_db
+  - global_scale_db
+  network_placement: managed_service
+  reachability: public_or_private
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-cosmos-db
+  name: Azure Cosmos DB
+  provider: azure
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - document_db
+  - wide_column_db
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: multi_region
+  apis:
+  - core_sql
+  - cassandra
+  - mongodb
+  - gremlin
+  - table
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-cache-redis
+  name: Azure Cache for Redis
+  provider: azure
+  category: database
+  tier: managed
+  roles:
+  - datastore
+  - cache
+  network_placement: managed_service
+  reachability: private_ip
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-blob-storage
+  name: Azure Blob Storage
+  provider: azure
+  category: storage
+  tier: managed
+  roles:
+  - datastore
+  - object_store
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-vnet
+  name: Azure Virtual Network
+  provider: azure
+  category: networking
+  tier: self_managed
+  roles:
+  - network_fabric
+  network_placement: network_fabric
+  reachability: private_ip
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-vnet-integration
+  name: Azure VNet Integration
+  provider: azure
+  category: networking
+  tier: managed
+  roles:
+  - connector
+  - serverless_vpc_connector
+  network_placement: connector
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-private-link
+  name: Azure Private Link
+  provider: azure
+  category: networking
+  tier: managed
+  roles:
+  - connector
+  - private_endpoint
+  network_placement: connector
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-load-balancer
+  name: Azure Load Balancer
+  provider: azure
+  category: networking
+  tier: managed
+  roles:
+  - edge_entry
+  - load_balancer_l4
+  network_placement: edge
+  reachability: public_or_private
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
 
-  # ---------------------------------------------------------------- GCP ----
-  - id: cloud-run
-    name: Cloud Run
-    provider: gcp
-    category: compute
-    tier: serverless
-    roles: [compute, container_runtime, http_target]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-functions
-    name: Cloud Functions
-    provider: gcp
-    category: compute
-    tier: serverless
-    roles: [compute, function_runtime, http_target, event_consumer]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: gke-autopilot
-    name: GKE Autopilot
-    provider: gcp
-    category: compute
-    tier: managed
-    roles: [compute, kubernetes, container_runtime, http_target]
-    network_placement: in_vpc
-    reachability: private_ip
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: compute-engine
-    name: Compute Engine
-    provider: gcp
-    category: compute
-    tier: self_managed
-    roles: [compute, vm, http_target]
-    network_placement: in_vpc
-    reachability: private_ip
-    region_scope: zonal
-    provenance: {generated: manual, status: manual}
-
-  - id: app-engine
-    name: App Engine
-    provider: gcp
-    category: compute
-    tier: managed
-    roles: [compute, paas_app_host, http_target]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-sql
-    name: Cloud SQL
-    provider: gcp
-    category: database
-    tier: managed
-    roles: [datastore, relational_db]
-    network_placement: managed_service
-    reachability: public_or_private
-    region_scope: regional
-    engines: [mysql, postgresql, sqlserver]
-    provenance: {generated: manual, status: manual}
-
-  - id: spanner
-    name: Cloud Spanner
-    provider: gcp
-    category: database
-    tier: managed
-    roles: [datastore, relational_db, global_scale_db]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: multi_region
-    provenance: {generated: manual, status: manual}
-
-  - id: firestore
-    name: Firestore
-    provider: gcp
-    category: database
-    tier: serverless
-    roles: [datastore, document_db, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: multi_region
-    provenance: {generated: manual, status: manual}
-
-  - id: bigtable
-    name: Cloud Bigtable
-    provider: gcp
-    category: database
-    tier: managed
-    roles: [datastore, wide_column_db]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: memorystore
-    name: Memorystore
-    provider: gcp
-    category: database
-    tier: managed
-    roles: [datastore, cache]
-    network_placement: managed_service
-    reachability: private_ip
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-storage
-    name: Cloud Storage
-    provider: gcp
-    category: storage
-    tier: managed
-    roles: [datastore, object_store, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: multi_region
-    provenance: {generated: manual, status: manual}
-
-  - id: vpc
-    name: VPC Network
-    provider: gcp
-    category: networking
-    tier: self_managed
-    roles: [network_fabric]
-    network_placement: network_fabric
-    reachability: private_ip
-    region_scope: global
-    provenance: {generated: manual, status: manual}
-
-  - id: serverless-vpc-access
-    name: Serverless VPC Access
-    provider: gcp
-    category: networking
-    tier: managed
-    roles: [connector, serverless_vpc_connector]
-    network_placement: connector
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-sql-auth-proxy
-    name: Cloud SQL Auth Proxy
-    provider: gcp
-    category: networking
-    tier: self_managed
-    roles: [connector, db_auth_proxy]
-    network_placement: connector
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: private-service-connect
-    name: Private Service Connect
-    provider: gcp
-    category: networking
-    tier: managed
-    roles: [connector, private_endpoint]
-    network_placement: connector
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-load-balancing
-    name: Cloud Load Balancing
-    provider: gcp
-    category: networking
-    tier: managed
-    roles: [edge_entry, load_balancer_l4, load_balancer_l7, path_routing]
-    network_placement: edge
-    reachability: public_or_private
-    region_scope: global
-    provenance: {generated: manual, status: manual}
-
-  - id: cloud-armor
-    name: Cloud Armor
-    provider: gcp
-    category: security
-    tier: managed
-    roles: [policy, waf, ddos_protection]
-    network_placement: policy
-    reachability: n_a
-    attaches_to_roles: [load_balancer_l7, edge_entry]
-    region_scope: global
-    provenance: {generated: manual, status: manual}
-
-  - id: pubsub
-    name: Pub/Sub
-    provider: gcp
-    category: integration
-    tier: serverless
-    roles: [messaging, event_router, message_queue, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: global
-    provenance: {generated: manual, status: manual}
-
-  - id: dataflow
-    name: Dataflow
-    provider: gcp
-    category: analytics
-    tier: managed
-    roles: [data_processing, batch_etl, stream_processing]
-    network_placement: in_vpc
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: bigquery
-    name: BigQuery
-    provider: gcp
-    category: analytics
-    tier: serverless
-    roles: [datastore, data_warehouse, analytics_sink]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: multi_region
-    provenance: {generated: manual, status: manual}
-
-  - id: vertex-ai
-    name: Vertex AI
-    provider: gcp
-    category: ai_ml
-    tier: managed
-    roles: [ml_platform, compute]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: secret-manager
-    name: Secret Manager
-    provider: gcp
-    category: security
-    tier: managed
-    roles: [secret_store]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: global
-    provenance: {generated: manual, status: manual}
-
-  # -------------------------------------------------------------- Azure ----
-  - id: azure-container-apps
-    name: Azure Container Apps
-    provider: azure
-    category: compute
-    tier: serverless
-    roles: [compute, container_runtime, http_target]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-functions
-    name: Azure Functions
-    provider: azure
-    category: compute
-    tier: serverless
-    roles: [compute, function_runtime, http_target, event_consumer]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: aks
-    name: Azure Kubernetes Service
-    provider: azure
-    category: compute
-    tier: managed
-    roles: [compute, kubernetes, container_runtime, http_target]
-    network_placement: in_vpc
-    reachability: private_ip
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-vm
-    name: Azure Virtual Machines
-    provider: azure
-    category: compute
-    tier: self_managed
-    roles: [compute, vm, http_target]
-    network_placement: in_vpc
-    reachability: private_ip
-    region_scope: zonal
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-app-service
-    name: Azure App Service
-    provider: azure
-    category: compute
-    tier: managed
-    roles: [compute, paas_app_host, http_target]
-    network_placement: serverless_offvpc
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-sql-database
-    name: Azure SQL Database
-    provider: azure
-    category: database
-    tier: managed
-    roles: [datastore, relational_db]
-    network_placement: managed_service
-    reachability: public_or_private
-    region_scope: regional
-    engines: [sqlserver]
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-sql-hyperscale
-    name: Azure SQL Hyperscale
-    provider: azure
-    category: database
-    tier: managed
-    roles: [datastore, relational_db, global_scale_db]
-    network_placement: managed_service
-    reachability: public_or_private
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-cosmos-db
-    name: Azure Cosmos DB
-    provider: azure
-    category: database
-    tier: managed
-    roles: [datastore, document_db, wide_column_db, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: multi_region
-    apis: [core_sql, cassandra, mongodb, gremlin, table]
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-cache-redis
-    name: Azure Cache for Redis
-    provider: azure
-    category: database
-    tier: managed
-    roles: [datastore, cache]
-    network_placement: managed_service
-    reachability: private_ip
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-blob-storage
-    name: Azure Blob Storage
-    provider: azure
-    category: storage
-    tier: managed
-    roles: [datastore, object_store, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-vnet
-    name: Azure Virtual Network
-    provider: azure
-    category: networking
-    tier: self_managed
-    roles: [network_fabric]
-    network_placement: network_fabric
-    reachability: private_ip
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-vnet-integration
-    name: Azure VNet Integration
-    provider: azure
-    category: networking
-    tier: managed
-    roles: [connector, serverless_vpc_connector]
-    network_placement: connector
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-private-link
-    name: Azure Private Link
-    provider: azure
-    category: networking
-    tier: managed
-    roles: [connector, private_endpoint]
-    network_placement: connector
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-load-balancer
-    name: Azure Load Balancer
-    provider: azure
-    category: networking
-    tier: managed
-    roles: [edge_entry, load_balancer_l4]
-    network_placement: edge
-    reachability: public_or_private
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-app-gateway
-    name: Azure Application Gateway
-    provider: azure
-    category: networking
-    tier: managed
-    roles: [edge_entry, load_balancer_l7, path_routing, waf_host]
-    network_placement: edge
-    reachability: public_or_private
-    region_scope: regional
-    # Note: WAF is a feature/SKU on this node, not a separate node. See
-    # `features` below — the original draft modelled it as a standalone service,
-    # which produced a dangling WAF box in the diagram.
-    features: [waf]
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-front-door
-    name: Azure Front Door
-    provider: azure
-    category: networking
-    tier: managed
-    roles: [edge_entry, load_balancer_l7, path_routing, cdn, waf_host]
-    network_placement: edge
-    reachability: public_or_private
-    region_scope: global
-    features: [waf]
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-service-bus
-    name: Azure Service Bus
-    provider: azure
-    category: integration
-    tier: managed
-    roles: [messaging, message_queue, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-event-grid
-    name: Azure Event Grid
-    provider: azure
-    category: integration
-    tier: serverless
-    roles: [messaging, event_router, event_source]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-data-factory
-    name: Azure Data Factory
-    provider: azure
-    category: analytics
-    tier: managed
-    roles: [data_processing, batch_etl]
-    network_placement: managed_service
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-stream-analytics
-    name: Azure Stream Analytics
-    provider: azure
-    category: analytics
-    tier: managed
-    roles: [data_processing, stream_processing]
-    network_placement: managed_service
-    reachability: n_a
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-synapse
-    name: Azure Synapse Analytics
-    provider: azure
-    category: analytics
-    tier: managed
-    roles: [datastore, data_warehouse, analytics_sink]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-ml
-    name: Azure Machine Learning
-    provider: azure
-    category: ai_ml
-    tier: managed
-    roles: [ml_platform, compute]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
-
-  - id: azure-key-vault
-    name: Azure Key Vault
-    provider: azure
-    category: security
-    tier: managed
-    roles: [secret_store]
-    network_placement: managed_service
-    reachability: api_endpoint
-    region_scope: regional
-    provenance: {generated: manual, status: manual}
+# Note: WAF is a feature/SKU on this node, not a separate node. See
+# `features` below — the original draft modelled it as a standalone service,
+# which produced a dangling WAF box in the diagram.
+- id: azure-app-gateway
+  name: Azure Application Gateway
+  provider: azure
+  category: networking
+  tier: managed
+  roles:
+  - edge_entry
+  - load_balancer_l7
+  - path_routing
+  - waf_host
+  network_placement: edge
+  reachability: public_or_private
+  region_scope: regional
+  features:
+  - waf
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-front-door
+  name: Azure Front Door
+  provider: azure
+  category: networking
+  tier: managed
+  roles:
+  - edge_entry
+  - load_balancer_l7
+  - path_routing
+  - cdn
+  - waf_host
+  network_placement: edge
+  reachability: public_or_private
+  region_scope: global
+  features:
+  - waf
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-service-bus
+  name: Azure Service Bus
+  provider: azure
+  category: integration
+  tier: managed
+  roles:
+  - messaging
+  - message_queue
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-event-grid
+  name: Azure Event Grid
+  provider: azure
+  category: integration
+  tier: serverless
+  roles:
+  - messaging
+  - event_router
+  - event_source
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-data-factory
+  name: Azure Data Factory
+  provider: azure
+  category: analytics
+  tier: managed
+  roles:
+  - data_processing
+  - batch_etl
+  network_placement: managed_service
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-stream-analytics
+  name: Azure Stream Analytics
+  provider: azure
+  category: analytics
+  tier: managed
+  roles:
+  - data_processing
+  - stream_processing
+  network_placement: managed_service
+  reachability: n_a
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-synapse
+  name: Azure Synapse Analytics
+  provider: azure
+  category: analytics
+  tier: managed
+  roles:
+  - datastore
+  - data_warehouse
+  - analytics_sink
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-ml
+  name: Azure Machine Learning
+  provider: azure
+  category: ai_ml
+  tier: managed
+  roles:
+  - ml_platform
+  - compute
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual
+- id: azure-key-vault
+  name: Azure Key Vault
+  provider: azure
+  category: security
+  tier: managed
+  roles:
+  - secret_store
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: regional
+  provenance:
+    generated: manual
+    status: manual

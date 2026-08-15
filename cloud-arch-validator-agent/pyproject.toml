@@ -13,9 +13,14 @@ dependencies = [
     "opentelemetry-instrumentation-google-genai>=0.1.0,<1.0.0",
     "gcsfs>=2024.11.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
-    # The vendored knowledge graph in app/kg_lib/ reads six YAML files and
-    # depends on nothing else — keeping that true is a stated invariant of the
-    # skill this agent wraps.
+    # The knowledge graph lives in Postgres, reached over a DSN. psycopg is a
+    # plain driver, not a cloud client: the same code talks to the local
+    # docker-compose database and to Cloud SQL, and nothing in the read or
+    # write path needs credentials for a specific cloud.
+    "psycopg[binary,pool]>=3.2,<4.0",
+    # Still required. The YAML backend is no longer the source of truth, but it
+    # is what the migration is tested against and what the loader falls back to
+    # when no database is configured.
     "pyyaml>=6.0",
 ]
 requires-python = ">=3.11,<3.14"
@@ -59,6 +64,13 @@ select = [
     "RUF", # ruff specific rules
 ]
 ignore = ["E501", "C901", "B006"] # ignore line too long, too complex
+
+[tool.ruff.lint.per-file-ignores]
+# The engine modules import each other by bare name, so app/kg_lib/ has to be on
+# sys.path before any of them is imported. That makes the sys.path statement
+# load-bearing and the imports below it necessarily non-top-of-file. The
+# alternative isort would produce fails only at runtime.
+"app/tools.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "frontend"]

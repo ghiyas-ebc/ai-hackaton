@@ -1,29 +1,34 @@
 # CLAUDE.md
 
 Orientation for any agent working in this repository. Read this before changing
-anything under `cloud-architecture-validator-create-architect/references/kg/`
-or any of the four skills' `scripts/`.
+anything under `cloud-arch-validator-agent/db/` or `cloud-arch-validator-agent/
+app/kg_lib/`.
 
 ## What this is
 
-Four Claude Skills, split from one, covering the lifecycle of a knowledge
-graph of cloud services (GCP, Azure) and the architectures built from it:
+A multi-agent ADK application over a knowledge graph of cloud services (GCP,
+Azure) stored in Postgres. It validates architectures for structural, security,
+reliability, cost, and data-residency problems, and translates them between
+providers.
 
-- **`cloud-architecture-validator-create-architect`** — the core skill.
-  Validates architectures for structural, security, reliability, cost, and
-  data-residency problems, and translates them between providers. Owns
-  `references/kg/` — the single source of truth the other three read.
-- **`cloud-architecture-validator-show-kg`** — read-only, Neo4j-Bloom-style
-  visual explorer of the KG itself (not a specific architecture). Has no KG
-  of its own; imports create-architect's `kg.py`/`validate.py` directly so it
-  can't drift.
-- **`cloud-architecture-validator-add`** — design stub. Add one service to
-  the KG, agent-verified where verification is possible (brand, category,
-  description, references_url, icon), human-gated where it isn't
-  (`network_placement`, `reachability`, `roles` — see D6).
-- **`cloud-architecture-validator-init`** — design stub. Bulk (re)populate
-  the KG from an external public catalog, versioned so a bad sync reverts
-  cleanly. Source/schema/auth not yet specified.
+`cloud-arch-validator-agent/` is the product. A coordinator with no tools routes
+to three specialists (D25):
+
+- **`validator_agent`** — validates a described architecture and translates it
+  between providers. Read-only. The common case.
+- **`explorer_agent`** — questions about the graph itself: which services exist,
+  filtering them by typed fields, graph health and rule coverage. Read-only.
+- **`curator_agent`** — the only writer. Adds a service, records human
+  verification. Gated on an engineer supplying `network_placement`,
+  `reachability` and `roles` (D6, D26).
+
+The four `cloud-architecture-validator-*` skill directories and the installed
+copy under `.claude/skills/` are **deleted** by D27. They held their own copies
+of the knowledge graph, one of which had gone two decisions stale while staying
+invocable. Postgres is the only source of truth now.
+
+`app/references/kg/*.yaml` still exists and is **generated output** — written by
+`db/export_to_yaml.py`, never edited. See D27.
 
 Its users are salespeople and presales engineers who do not design cloud
 architecture for a living, producing material that goes in front of a
@@ -34,30 +39,33 @@ otherwise be caught in a client design review, or worse, after go-live.
 
 ## Commands
 
-All paths below are relative to `cloud-architecture-validator-create-architect/`
-unless stated otherwise — that is the skill that owns the KG and the core
-scripts.
+All paths below are relative to `cloud-arch-validator-agent/`.
 
 ```bash
-python3 scripts/check_kg.py                      # integrity + regression + coverage
-python3 scripts/validate.py --edges "a>b,b>c"    # two-layer validation
-python3 scripts/translate.py --edges "..." --to azure
-python3 tools/sync_provider_inventory.py --list tools/sample_resource_types.txt
+docker compose up -d db                  # local Postgres, the graph's home
+uv run python db/migrate.py              # apply pending schema migrations
+uv run python db/migrate.py --status     # applied vs pending
+uv run python db/seed_from_yaml.py       # rebuild a database from the export
+uv run python db/export_to_yaml.py       # Postgres -> YAML, after any change
+uv run python db/export_to_yaml.py --check     # diff the export against the DB
 
-# from cloud-architecture-validator-show-kg/scripts/ — reads the sibling KG above
-python3 export_kg_graph.py --output ../visualizations/kg_graph.json
+uv run pytest tests/unit tests/integration
+uv run ruff check app tests db
 ```
 
-`check_kg.py` must report clean integrity, **37/37 regression**, and L1 coverage
-**≥80%** before anything ships. A coverage drop means a rule silently narrowed.
-It also reports per-layer coverage for L2–L8 (see D23); a layer whose rules stop
-firing is the same failure, hidden from the headline number.
+The graph's own gate is `check_kg_health` (the `check_kg.py` engine): clean
+integrity, **37/37 regression**, and L1 coverage **≥80%** before anything ships.
+A coverage drop means a rule silently narrowed. It also reports per-layer
+coverage for L2–L8 (see D23); a layer whose rules stop firing is the same
+failure, hidden from the headline number. An entry flagged `provenance.status
+unverified` is the D21 sign-off gate holding, not a defect — clear it by
+reviewing the entry, not by clearing the flag.
+
+Tests that need Postgres skip when `CAV_PG_DSN` does not answer, so the suite is
+green on a machine with no database. The migration's parity proof runs without
+one either: it chains the pure halves of the seed and the loader.
 
 ## Invariants — do not break these without an explicit decision
-
-Unqualified `scripts/`, `references/`, and `tools/` paths below are all
-inside `cloud-architecture-validator-create-architect/` — the skill that owns
-them.
 
 1. **No LLM in the decision path.** Verdicts come from `scripts/validate.py`.
    The model parses descriptions and communicates results; it never judges
@@ -66,10 +74,17 @@ them.
    properties via `connectivity-rules.yaml`. Do not add pair entries when a rule
    would cover the case. `overrides.yaml` is currently empty and should stay
    close to empty.
-3. **No runtime dependency beyond PyYAML.** No cloud SDK, no credentials, no
-   network at skill runtime. `tools/` is exempt: it runs at authoring time and
-   is excluded from the shipped zip.
-4. **Nothing writes `services.yaml` automatically.** See D6.
+3. **No cloud SDK, no credentials for a specific cloud, at runtime.** *Amended
+   by D24 — this used to read "no runtime dependency beyond PyYAML".* The graph
+   now lives in Postgres, so `psycopg` is a runtime dependency. What has not
+   changed is the reason the rule existed: no `google-cloud-*` client, no
+   provider account needed to run the tool, and nothing that makes demoing an
+   Azure architecture require a GCP login. A DSN is not a cloud SDK. `tools/` is
+   exempt: it runs at authoring time and is excluded from the shipped zip.
+4. **Nothing adds a service without a human supplying the judgment fields.**
+   *Amended by D26 — this used to read "nothing writes `services.yaml`
+   automatically".* The file is no longer the store; the gate is unchanged and
+   now has a CHECK constraint under it. See D6 and D26.
 5. **`UNCOVERED` and `UNKNOWN_SERVICE` are valid answers.** Never make the
    system guess to avoid them.
 
@@ -78,7 +93,10 @@ them.
 Rationale for choices that look questionable without context. Several of these
 are things a reasonable reader would otherwise propose reversing.
 
-**D1 — Local YAML, not BigQuery.** The original draft stored the knowledge graph
+**D1 — Local YAML, not BigQuery.** *Superseded by D24: the graph is in Postgres.
+The reasoning below is why BigQuery was wrong, and most of it is why Postgres is
+the right replacement rather than a return to the warehouse.* The original draft
+stored the knowledge graph
 in a BigQuery Property Graph. Total KG size is roughly 100 rows: file scale, not
 warehouse scale. BigQuery made the skill unable to run without network and GCP
 credentials — including when demoing Azure architectures to Azure clients. A
@@ -183,11 +201,13 @@ reconsider the source, not a reason to add an SDK. The specific URL, its
 schema, and update cadence are still unspecified — this decision fixes the
 *method*, not the *source*.
 
-**D12 — `-add` writes directly to `services.yaml`, no outside store.** The
-confirmed entry lands in place, the same file and the same way a manual edit
-would land it. No staging file, no second copy of the data living anywhere
-else — one file, one write path, whether the edit came from a person or from
-`-add`'s agent-assisted flow.
+**D12 — `-add` writes directly to `services.yaml`, no outside store.**
+*Superseded by D24/D26 — the store is now a Postgres table. The principle it
+was really asserting survives: one write path, no staging copy, whether the
+edit came from a person or an agent.* The confirmed entry lands in place, the
+same file and the same way a manual edit would land it. No staging file, no
+second copy of the data living anywhere else — one file, one write path,
+whether the edit came from a person or from `-add`'s agent-assisted flow.
 
 **D13 — Verify rendering against a small real subset before trusting it
 broadly.** `references/rendering.md`'s layout rules are marked unverified
@@ -336,6 +356,210 @@ nodes whose roles are in `regenerate_roles` — connectors have no equivalents
 *by design* (equivalences.yaml drops and regenerates them at the target), and
 reading that absence as lock-in flagged all five connectors in the KG as
 unportable on the first run.
+
+**D24 — The knowledge graph lives in Postgres. D1 is superseded, but not
+reversed.** D1 rejected BigQuery and it was right to: 100 rows is file scale,
+and the real damage was that it made the tool unable to run without network and
+GCP credentials — including when demoing Azure architectures to Azure clients.
+Every word of that still holds, and it is why the replacement is a local
+Postgres over a DSN rather than a return to the warehouse. `docker compose up -d
+db` plus a seed is the whole setup: no project, no credentials, no cloud client
+in the dependency tree. Cloud SQL swaps in by changing `CAV_PG_DSN` and nothing
+else, because nothing else knows where the database is.
+
+What changed was not size but *access*. D1 reasoned about row count; the
+pressure that actually arrived was concurrency and shape. Three agents now read
+the graph and one writes to it (D25), which a file cannot arbitrate — the write
+path was a read-modify-rewrite of a whole YAML document, which is a lost update
+waiting for a second editor. And the queries the product wanted were always
+`WHERE` clauses over typed fields (D22 said exactly this: "when the KG does
+outgrow context, the answer is a query tool, not embeddings"). "Which Azure
+databases are reachable only over a private IP" is one statement against a view
+and was a scripted scan over a parsed file.
+
+The migration is deliberately not a rewrite. `validate.py`, `translate.py`,
+`verdict_card.py` and `check_kg.py` are untouched: `kg_pg.py` returns the same
+`KnowledgeGraph` object `_load_local()` did, so the rule engine never learns
+where its rows came from. This is what keeps invariant #1 intact through the
+move — the engine still decides every verdict, in the same Python, and the
+37/37 regression fixture passes against Postgres unchanged. Storage was
+swapped; judgement was not touched.
+
+Three things the migration had to get right, each of which would have failed
+silently:
+
+*Row order is a verdict input.* `validate.py` resolves a missing component with
+`by_role(role, provider)[0]` — the first service holding the role, in authored
+order. `ORDER BY id` would have quietly changed which connector gets inserted
+into client architectures with every test still green. Hence `service.ord`.
+
+*Absent is not NULL.* The YAML omitted optional fields rather than writing
+`null`, and downstream code reads presence (`"gate" in layer`). SQL has only
+NULL, so the loader drops None-valued optional keys on the way out — except
+`severity`, which the YAML declares on every connectivity rule and explicitly
+sets to `null` on six of them.
+
+*The comments were the documentation.* This doc's own Style section says the KG
+comments carry most of the reasoning behind the model. Migrating the data and
+dropping the commentary would have left a future editor with `serverless_offvpc`
+and nothing saying what it means, so the seed lifts both per-entry notes and each
+file's header out of the raw text into `rationale` columns and `doc:*` rows.
+
+The YAML files survive as `CAV_KG_BACKEND=local`. They are no longer
+authoritative — they are the reference the migration is tested against, and a
+backend that needs no database. `tests/unit/test_kg_postgres_parity.py` chains
+the pure halves of the seed and the loader to prove the two produce an identical
+graph, and it runs without Postgres; the SQL round trip is a second set of tests
+that skip when no DSN answers. *D10's checkpoint format needs revisiting: a zip
+of `references/kg/` no longer captures the state that matters.*
+
+**D25 — Multi-agent, split by workflow, and the tool grouping is the actual
+boundary.** One agent with thirteen flat tools became a coordinator with no
+tools and three specialists: `validator_agent` (validate, translate, diagram),
+`explorer_agent` (query the graph, health), `curator_agent` (the only writer).
+The axis is D9's, and for D9's reasons — these are different jobs with different
+risk profiles, two read-only and one gated. Splitting by validation layer was
+considered and rejected: L1–L8 is a decision tree inside `validate.py`, and
+giving a layer its own agent would put a model between rungs of it, which is
+invariant #1 lost by architecture rather than by opinion.
+
+What makes the split real is which tools each agent holds, not what each is
+told. Every boundary here is also a sentence in a prompt, and a prompt can be
+argued with — a model holding a write tool can be talked into writing. So the
+two agents a rep talks to during a client call hold no writer, and the curator
+holds no verdict tool: an agent that could both validate and add has an obvious
+way out of an inconvenient `UNKNOWN_SERVICE`, which is adding the service.
+`tests/unit/test_agent_boundaries.py` asserts these, because a boundary nobody
+tests is a comment.
+
+The coordinator holds zero tools on purpose. One that could answer directly
+would stop transferring under any pressure at all.
+
+**D26 — The judgment-field gate is now a CHECK constraint, and D6's asymmetry
+is unchanged.** D6 observed that `check_kg.py` cannot catch a wrong
+`reachability` because it verifies structural consistency, not semantic truth.
+That is still true, and the human gate is still the only thing standing between
+a wrong value and roughly twenty confidently-wrong verdicts.
+
+What the database adds is a floor. `network_placement`, `reachability`, `tier`
+and `region_scope` are constrained to closed sets at the storage layer, which no
+caller can route around. This caught a live bug in the old write path the moment
+it was exercised: it took `network_placement` as free text and stored `.split()`
+of it — a list where the schema wants a scalar — and never checked
+`reachability` against the four legal values at all. Both produced a node that
+read as present and valid. `check_kg.py` reported clean, exactly as D6 predicted.
+
+D21's provenance gate is now a constraint too: `prov_status = 'verified'`
+requires a `prov_verified` date, so an entry cannot claim a review without
+saying when. The curator writes `unverified` and the health check holds open
+until a human flips it — `mark_service_verified` requires the caller to supply
+the date rather than defaulting to today, because a date the tool invented would
+assert a review that did not happen.
+
+**D27 — One graph, in Postgres. The YAML is generated output and the skill
+directories are gone.** D24 moved the graph into Postgres and left four copies
+of the YAML behind: the agent's vendored set, the retired
+`create-architect/references/kg/`, and an installed copy under
+`.claude/skills/`. That was supposed to be temporary and instead became the
+system's main structural risk.
+
+The `.claude/skills/` copy is why this is a decision and not a cleanup. It was
+committed, it was invocable, and its graph predated two decisions: **0 of 45
+services carried a provenance block** (D21) and **the L0–L8 ladder was absent
+entirely**, along with both PORT rules (D23). Anything invoking that skill got
+connectivity answers with no architecture layer behind them and no sign-off
+gate, while the database three directories away had both. Two consumers, one
+product, different answers, and nothing anywhere reporting the divergence —
+`check_kg` cannot see a copy it does not read.
+
+All five skill directories are deleted (56 files). Nothing in the agent
+imported them.
+
+What stays is one YAML set under `app/references/kg/`, and it is now generated
+by `db/export_to_yaml.py` rather than authored. The direction of the arrow is
+the whole change: Postgres is written, YAML is produced from it. Before, the
+same files were simultaneously the seed input, the offline fallback, and the
+list of valid rule ids `verdict_grounding` checks a response against — three
+jobs, no owner, and a silent failure in each. Seed from a stale file and get an
+old graph. Run `CAV_KG_BACKEND=local` and get different verdicts than
+production. Add a rule in SQL and watch the metric score its id as fabricated.
+
+Deleting the YAML outright was the other option and was rejected for what it
+would have cost: a database is a poor review surface. You cannot see a proposed
+change to a connectivity rule in a pull request, cannot diff last month's graph
+against today's, and `docker volume rm` takes the whole thing. Those were
+properties of the graph being a file, and D24 gave them up without noticing.
+Generated-and-checked gets them back without reintroducing a second source.
+
+`tests/unit/test_kg_export_drift.py` is what makes the arrow real rather than a
+convention: it fails when the committed files disagree with the database, and
+`--check` prints the offending lines. The round-trip half runs without Postgres
+— export and re-import produce an identical graph, verified including the two
+orderings that decide verdicts (`service.ord`, `connectivity_rule.seq`) — and
+the 37/37 regression passes through the export unchanged.
+
+*Rejected: Apache AGE.* A graph extension sounds like the natural fit for a
+knowledge graph and is the wrong tool for this one. D2 is the reason: validity
+here is **derived from node properties at query time**, not stored. The 691
+edges `export_kg_graph` returns are computed by running the rule engine over
+every pair — they are output, not data. Persisting them as AGE vertices and
+edges is D2 reversed, and D21 already rejected the same store-nodes-and-edges
+model when it came up as Graphify/OKF. The edges that genuinely are stored —
+equivalences, aliases, alternatives — number about 30 against 45 nodes, are all
+one hop, and are already single joins. There is no traversal question the
+product asks that Cypher would answer better than the `WHERE` clause it is
+today. The cost is not theoretical either: **Cloud SQL does not allow-list
+AGE**, so adopting it would break D24's "Cloud SQL swaps in by changing
+`CAV_PG_DSN` and nothing else" and put self-managed Postgres on the critical
+path. *Reconsider if the graph ever stores multi-hop relationships it needs to
+traverse — dependency chains, blast radius, migration paths — which would be a
+real change in what the graph is for, not a change in how it is queried.*
+
+**D28 — Numbered migrations, a capped graph export, and the Gap Report in the
+database.** Three consequences of D24 that the migration itself did not carry,
+found by assessing the data layer rather than by anything breaking.
+
+*Schema changes have a path.* `schema.sql` was `CREATE TABLE IF NOT EXISTS`
+throughout, which works exactly once — re-running it against a populated
+database is a no-op, so the second change had nowhere to go but a hand-typed
+`ALTER` against live data with nothing recording it. It is now
+`db/migrations/0001_initial_schema.sql`, applied by `db/migrate.py` and recorded
+in `kg.schema_migration`. Plain SQL and a small runner; Alembic is more
+machinery than thirteen tables justify. Three properties earn their keep: each
+migration runs in its own transaction (Postgres has transactional DDL, so a
+failure leaves nothing behind — verified when 0003 failed on a bad `unnest` and
+rolled back clean), applied files are checksummed so editing one that already
+ran is refused rather than silently diverging, and a fresh database is not
+special-cased — seeding runs the same migrations production does.
+
+*`export_kg_graph` no longer returns 190 KB by default.* Its 691 edges are
+derived, not stored — every same-provider pair the engine allows — so they are
+output rather than data, and putting them in a context window answers no
+question the counts and a per-node degree do not answer better. Default is now
+a 12.6 KB summary; `include_edges=True` returns the full adjacency for the case
+where the adjacency is the answer.
+
+*The Gap Report is a table.* Every `UNCOVERED` verdict and unknown service logs
+a record, and that list is the only data here that cannot be regenerated — it is
+what real users actually asked. It was appending to a gitignored JSONL file
+inside the container, which made it the least durable thing in the system. It
+now writes to `kg.gap_record`, with `gap_summary` grouping repeats, because the
+question it exists to answer ("what should the graph cover next") is a join
+against the graph and was a hand-written script over a file.
+
+The engine did not learn about the database to make that work. `log_gap_records`
+takes a `sink`, defaulting to the file; `tools.py` injects a Postgres one and
+falls back to the file when the database is unreachable, because a gap is logged
+while a user waits on a verdict and storage being down is not their problem.
+
+One bug worth recording, because the fix is the general rule: 0002 resolved
+which service was missing by matching the element text against known ids in SQL.
+On `cloud-run -> cloud-composer` that finds `cloud-run` — the half that exists —
+and reported the gap as being about a known service, inverting the triage it
+existed to support. 0003 replaced it with `missing_services`, supplied by the
+caller, which resolved every id against the loaded graph while producing the
+verdict. The database should not be asked to re-derive something the caller
+already knew.
 
 ## Open questions
 

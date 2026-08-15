@@ -118,8 +118,12 @@ def test_all_proven_card_has_an_explicit_empty_checklist():
 
 
 # --------------------------------------------------------- User Story 4 (P3)
+# These two call the engine directly rather than through `tools`, because they
+# are about the engine's own contract: with no sink supplied it appends the
+# JSONL file and needs no database. `tools` injects a Postgres sink, which is
+# tested at that layer instead — see test_gap_records_persist.py.
 def test_uncovered_finding_appends_a_gap_record(isolated_gap_report):
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
     lines = isolated_gap_report.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
@@ -128,8 +132,8 @@ def test_uncovered_finding_appends_a_gap_record(isolated_gap_report):
 
 
 def test_repeated_gap_is_logged_each_time_not_deduplicated(isolated_gap_report):
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
-    tools.generate_verdict_card("cloud-run>totally-made-up-service")
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
+    vc.generate_verdict_card("cloud-run>totally-made-up-service", kg=tools._KG)
     lines = isolated_gap_report.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
 
@@ -137,3 +141,28 @@ def test_repeated_gap_is_logged_each_time_not_deduplicated(isolated_gap_report):
 def test_clean_request_writes_no_gap_record(isolated_gap_report):
     tools.generate_verdict_card("cloud-load-balancing>cloud-run")
     assert not isolated_gap_report.exists()
+
+
+def test_card_surfaces_mutually_exclusive_services() -> None:
+    """Cloud SQL and Spanner are alternatives, and the card has to say so.
+
+    The engine has always reported this under `exclusive_choices`; the card
+    dropped it until schema 1.1. A rep who asked for both was handed a Verdict
+    Card rating an architecture that cannot be built, with nothing anywhere in
+    the card indicating that. Every other finding on such a card describes a
+    system the client will not end up with, which is why the agent is told to
+    lead with this rather than bury it among the findings.
+    """
+    card = tools.generate_verdict_card("cloud-run>cloud-sql,cloud-run>spanner")
+    assert card["schema_version"] == "1.1"
+
+    choices = card["exclusive_choices"]
+    assert choices, "mutually exclusive pair was dropped from the card"
+    assert set(choices[0]["pair"]) == {"cloud-sql", "spanner"}
+    assert "Deciding question" in choices[0]["message"]
+
+
+def test_card_reports_no_exclusive_choices_when_there_are_none() -> None:
+    """The field is always present, so its absence can never read as 'none'."""
+    card = tools.generate_verdict_card("cloud-run>cloud-sql")
+    assert card["exclusive_choices"] == []

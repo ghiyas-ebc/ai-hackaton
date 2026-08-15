@@ -1,0 +1,18 @@
+# Repository root. The agent has its own, far more detailed .gitignore; this
+# covers what leaks at the top level and inside the retired skill directories,
+# which that one does not reach.
+
+# Byte-compiled Python. The skill scripts get imported by tooling and tests,
+# which leaves __pycache__ behind in directories nothing else ignores.
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS
+.DS_Store
+
+# Environments
+.venv/
+venv/
+.env
+!.env.example
