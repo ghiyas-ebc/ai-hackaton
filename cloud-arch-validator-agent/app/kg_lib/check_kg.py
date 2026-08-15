@@ -1,20 +1,24 @@
 """
 Knowledge graph integrity checker + regression against the original draft.
 
-Run this after every KG change. It guards four things:
+Run this after every KG change. It guards five things:
 
 1. Internal consistency — dangling references, roles required by rules that no
    node provides, rules that can never fire.
-2. Regression — every edge that used to be hand-written in the draft SQL must
+
+2. Role vocabulary — roles are a closed set, and the catalog's `kind` must
+   agree with what the rules actually match. A misspelled role is structurally
+   a valid string, so check 1 walks straight past it.
+3. Regression — every edge that used to be hand-written in the draft SQL must
    still receive the correct verdict. This is the evidence that the property
    model replaced the pair-list model without losing knowledge.
-3. Rule reachability — connectivity-rules.yaml is first-match-wins, so a rule
+4. Rule reachability — connectivity-rules.yaml is first-match-wins, so a rule
    inserted too high silently starves every rule below it that it also matches.
    Regression cannot see this: it only replays old pairs, which the shadowing
    rule may still decide correctly. Reachability brute-forces every directed
    node pair and attributes the verdict to the rule that produced it; a rule
    that never wins any pair is dead.
-4. Provenance — every node must declare who wrote it, and any node an agent
+5. Provenance — every node must declare who wrote it, and any node an agent
    proposed must carry a human sign-off. This does not verify semantic truth
    (see D6 — nothing here can); it verifies that somebody claims to have
    checked, which is the part a script can actually enforce.
@@ -86,6 +90,80 @@ def check_integrity(kg):
                 problems.append(f"Node '{s['id']}' is missing property '{field}'.")
 
     return problems
+
+
+def _roles_named_by_rules(kg):
+    """Roles a connectivity rule matches on, read out of its `when` clause.
+
+    Only the YAML-declared half. validate.py and verdict_card.py also match
+    roles, in Python, and no cheap introspection finds those — which is exactly
+    why the catalog records where each load-bearing role is read rather than
+    leaving a reader to grep for it.
+    """
+    named = set()
+    for rule in kg.conn_rules:
+        if rule.get("needs_role"):
+            named.add(rule["needs_role"])
+        for side in ("source", "target"):
+            cond = (rule.get("when") or {}).get(side) or {}
+            for key in ("any_role", "all_roles", "none_role"):
+                named.update(cond.get(key) or [])
+    return named
+
+
+def check_role_catalog(kg):
+    """Roles are a closed vocabulary, and `kind` must not lie.
+
+    Two failures this catches that nothing else did. A role nobody declared —
+    usually a typo — inserts cleanly, matches no rule, and leaves a node that
+    reads as fully specified; the integrity check above walks straight past it
+    because a role is structurally just a string. And a role the catalog calls
+    `descriptive` while a rule matches it tells the curator not to bother with
+    a field that decides verdicts, which is worse than saying nothing.
+
+    Returns (problems, warnings). An unused role is a warning: vocabulary
+    ahead of the graph is untidy, not wrong.
+    """
+    problems, warnings = [], []
+    catalog = kg.role_catalog
+
+    if not catalog:
+        # The local backend on a tree with no export, or a database migrated
+        # past 0004 and never seeded. Say so rather than passing every check
+        # below vacuously.
+        return (["The role catalog is empty — `role-catalog.yaml` is missing or "
+                 "`role_catalog` was never seeded. Every role check below is "
+                 "silently skipped while it stays empty."], warnings)
+
+    held = {r for s in kg.services.values() for r in s.get("roles", [])}
+    for role in sorted(held - set(catalog)):
+        owners = sorted(s["id"] for s in kg.services.values()
+                        if role in s.get("roles", []))
+        problems.append(
+            f"Role '{role}' is held by {', '.join(owners)} but is not in the "
+            "role catalog. A role outside the catalog is matched by nothing — "
+            "check the spelling, or add it with a `kind`."
+        )
+
+    for role in sorted(_roles_named_by_rules(kg) | set(kg.regenerate_roles)):
+        entry = catalog.get(role)
+        if entry is None:
+            problems.append(
+                f"Rules match role '{role}' but it is not in the role catalog."
+            )
+        elif entry.get("kind") != "load_bearing":
+            problems.append(
+                f"Role '{role}' is catalogued as '{entry.get('kind')}' while a "
+                "rule matches it. Promote it to load_bearing — the curator is "
+                "currently being told this role is optional."
+            )
+
+    for role in sorted(set(catalog) - held):
+        warnings.append(
+            f"Role '{role}' is in the catalog but held by no service."
+        )
+
+    return problems, warnings
 
 
 VALID_PROVENANCE_STATUS = {"manual", "unverified", "verified"}
@@ -369,6 +447,18 @@ def main():
     else:
         print("  clean")
 
+    print("\n== Role catalog ==")
+    role_problems, role_warnings = check_role_catalog(kg)
+    if role_problems:
+        for p in role_problems:
+            print("  [!]", p)
+    else:
+        load_bearing = len(kg.load_bearing_roles)
+        print(f"  clean — {len(kg.role_catalog)} roles, {load_bearing} "
+              f"load-bearing, {len(kg.role_catalog) - load_bearing} descriptive")
+    for w in role_warnings:
+        print("  [~]", w)
+
     print("\n== Provenance ==")
     prov_problems, prov_warnings = check_provenance(kg)
     if prov_problems:
@@ -445,7 +535,7 @@ def main():
                   "two nodes cannot produce, or may have silently narrowed.")
 
     return 1 if (
-        problems or prov_problems or failed or unreachable
+        problems or role_problems or prov_problems or failed or unreachable
         or icon_problems or icon_failed
     ) else 0
 

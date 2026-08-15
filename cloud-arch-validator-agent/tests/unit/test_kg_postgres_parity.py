@@ -74,6 +74,7 @@ ATTRIBUTES = [
     "regenerate_roles",
     "equivalences",
     "icons",
+    "role_catalog",
 ]
 
 
@@ -127,6 +128,7 @@ def test_yaml_comments_are_carried_across_not_dropped(rows):
         "doc:equivalences",
         "doc:overrides",
         "doc:icons",
+        "doc:role-catalog",
     }
     assert "serverless_offvpc" in docs["doc:services"]
     assert "FIRST MATCH WINS" in docs["doc:connectivity-rules"].upper()

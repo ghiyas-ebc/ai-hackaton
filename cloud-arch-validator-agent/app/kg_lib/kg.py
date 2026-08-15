@@ -29,7 +29,8 @@ KG_DIR = Path(__file__).resolve().parent.parent / "references" / "kg"
 class KnowledgeGraph:
     def __init__(self, services, conn_rules, conn_fallback, arch_rules,
                  aliases, overrides, alternatives, equivalences,
-                 regenerate_roles, icons=None, arch_layers=None):
+                 regenerate_roles, icons=None, arch_layers=None,
+                 role_catalog=None):
         self.services = {s["id"]: s for s in services}
         self.conn_rules = conn_rules
         self.conn_fallback = conn_fallback
@@ -42,6 +43,17 @@ class KnowledgeGraph:
         self.overrides = {(o["source"], o["target"]): o for o in overrides}
         self.alternatives = alternatives
         self.regenerate_roles = set(regenerate_roles)
+        # role -> {kind, note}. `kind` splits the roles something in the engine
+        # matches from the ones carried only for a reader. Nothing in the
+        # decision path reads this — a rule matches a role whether or not the
+        # catalog calls it load-bearing. It exists so the curator knows which
+        # roles it must get right, and so check_kg can refuse a role no rule
+        # will ever see.
+        self.role_catalog = role_catalog or {}
+        self.load_bearing_roles = {
+            r for r, entry in self.role_catalog.items()
+            if entry.get("kind") == "load_bearing"
+        }
         self.equivalences = equivalences
         self._eq_index = self._build_eq_index(equivalences)
         self.icons = icons or {"categories": {}, "services": {}}
@@ -196,6 +208,7 @@ def _load_local():
     ov = _read("overrides.yaml")
     eq = _read("equivalences.yaml")
     icons = _read("icons.yaml")
+    roles = _read("role-catalog.yaml")
     return KnowledgeGraph(
         services=services,
         conn_rules=conn["rules"],
@@ -208,6 +221,7 @@ def _load_local():
         equivalences=eq["equivalences"],
         regenerate_roles=eq.get("regenerate_roles", []),
         icons=icons,
+        role_catalog=roles.get("roles", {}) or {},
     )
 
 

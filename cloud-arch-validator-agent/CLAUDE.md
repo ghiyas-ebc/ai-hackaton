@@ -108,6 +108,14 @@ uv run python db/export_to_yaml.py --check   # prints the drifted lines
 export is what preserves the things the graph lost by leaving git: a reviewable
 diff, a restore path, and an offline backend. See D27 in the parent repo.
 
+`role-catalog.yaml` is one of the seven and is generated the same way. It holds
+the closed set of `roles` and, per role, whether anything in the engine matches
+it (`load_bearing`) or it is carried for a reader (`descriptive`). `service_role.
+role` is a foreign key onto it, so a misspelled role is refused by the database
+rather than accepted and silently never matched. Adding a load-bearing role
+means a rule starts matching one — write the rule first; the catalog records
+what reads a role, it does not license one. See D29.
+
 ### The rule engine was not rewritten for Postgres
 
 `kg_pg.py` returns the same `KnowledgeGraph` object the YAML loader did, so

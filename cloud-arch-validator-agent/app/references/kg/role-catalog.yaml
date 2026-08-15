@@ -1,0 +1,163 @@
+# GENERATED FILE — do not edit.
+#
+# Written by db/export_to_yaml.py from the Postgres knowledge graph, which
+# is the source of truth. An edit here is overwritten by the next export,
+# and tests/unit/test_kg_export_drift.py fails before that anyway.
+#
+# To change the graph: use the curator agent, or SQL, then re-run the
+# export. To rebuild a database from this file: db/seed_from_yaml.py.
+
+# Role vocabulary, and which roles the engine actually reads.
+#
+# `kind` is the whole point of this file:
+#
+# load_bearing — something matches this role: a connectivity rule's `when`
+# clause, a `needs_role`, one of validate.py's L2-L8 checks, verdict_card.py's
+# tech-mismatch rules, or `regenerate_roles`. Getting one wrong, or leaving
+# one off, changes verdicts.
+# descriptive — carried for the reader. True, useful in a service entry, and
+# read by nothing. `wide_column_db` on Bigtable is the shape of it.
+#
+# The split is measured rather than declared: it is what the rules and the
+# engine reference today. A rule that starts matching a descriptive role
+# promotes it here, and the curator insists on it from then on. Rules lead,
+# the catalog follows — this file does not license a role, it records that
+# something reads one.
+#
+# The set is closed at the storage layer: `service_role.role` is a foreign key
+# onto this table. A misspelled role used to insert cleanly, match nothing, and
+# leave a node reading as fully specified with the integrity check clean through
+# it. That is D6's failure shape, and the fix is D26's: put the refusal where
+# no caller can route around it.
+
+roles:
+  analytics_sink:
+    kind: load_bearing
+    note: Matched by CONN-PROCESSING-TO-SINK as a pipeline's target.
+  batch_etl:
+    kind: descriptive
+    note: Describes the processing style; data_processing is what rules match.
+  cache:
+    kind: descriptive
+    note: Describes what the store is for; datastore is what rules match.
+  cdn:
+    kind: descriptive
+    note: Describes the edge service's function; edge_entry is what rules match.
+  compute:
+    kind: load_bearing
+    note: Matched by CONN-MESSAGING-TO-PROCESSING, and read by the direction convention that
+      flips an edge pointing out of a passive store.
+  connector:
+    kind: load_bearing
+    note: SEC-001 reads it to decide whether a private path exists anywhere in the architecture,
+      and equivalences regenerates it at the target provider rather than translating it.
+  container_runtime:
+    kind: descriptive
+    note: Describes how the compute runs; compute is what rules match.
+  data_processing:
+    kind: load_bearing
+    note: Matched by CONN-MESSAGING-TO-PROCESSING and CONN-PROCESSING-TO-SINK.
+  data_warehouse:
+    kind: descriptive
+    note: Describes the sink's shape; analytics_sink is what rules match.
+  datastore:
+    kind: load_bearing
+    note: Matched by CONN-EDGE-TO-NON-HTTP and CONN-PROCESSING-TO-SINK, and read by SEC-002,
+      REL-003, GOV-001 and the direction convention.
+  db_auth_proxy:
+    kind: descriptive
+    note: Names the pattern CONN-K8S-TO-RELATIONAL-DB recommends in its message; no rule matches
+      the role itself.
+  ddos_protection:
+    kind: descriptive
+    note: Describes the policy's function; where it may attach is decided by network_placement
+      = policy.
+  document_db:
+    kind: descriptive
+    note: Describes the database model; datastore is what rules match.
+  edge_entry:
+    kind: load_bearing
+    note: Matched by CONN-EDGE-TO-HTTP, CONN-EDGE-TO-NON-HTTP and CONN-POLICY-ATTACH-VALID.
+      SEC-003 fires on its absence.
+  event_consumer:
+    kind: load_bearing
+    note: Matched by CONN-MESSAGING-TO-PROCESSING and by verdict_card's tech-mismatch rules.
+  event_router:
+    kind: load_bearing
+    note: Matched by verdict_card's tech-mismatch rules.
+  event_source:
+    kind: load_bearing
+    note: Matched by CONN-MESSAGING-TO-PROCESSING, and what keeps a store that also emits
+      events from being normalized as a passive target.
+  function_runtime:
+    kind: descriptive
+    note: Describes how the compute runs; compute is what rules match.
+  global_scale_db:
+    kind: descriptive
+    note: Describes the database's reach; region_scope is the field rules read.
+  http_target:
+    kind: load_bearing
+    note: Matched by CONN-EDGE-TO-HTTP and read by SEC-003.
+  kubernetes:
+    kind: load_bearing
+    note: Matched by CONN-K8S-TO-RELATIONAL-DB and CONN-K8S-TO-SECRET.
+  load_balancer_l4:
+    kind: descriptive
+    note: Describes the layer it balances at. Only load_balancer_l7 is matched, because a
+      WAF cannot attach to L4.
+  load_balancer_l7:
+    kind: load_bearing
+    note: Matched by CONN-POLICY-ATTACH-VALID — a WAF attaches here and nowhere else.
+  message_queue:
+    kind: load_bearing
+    note: Matched by verdict_card's tech-mismatch rules.
+  messaging:
+    kind: load_bearing
+    note: Matched by CONN-MESSAGING-TO-PROCESSING and by verdict_card's tech-mismatch rules.
+  ml_platform:
+    kind: load_bearing
+    note: Matched by CONN-PROCESSING-TO-SINK.
+  network_fabric:
+    kind: descriptive
+    note: Describes the node. Rules match network_fabric as a network_placement, not as a
+      role.
+  object_store:
+    kind: descriptive
+    note: Describes the storage model; datastore is what rules match.
+  paas_app_host:
+    kind: descriptive
+    note: Describes the hosting model; compute is what rules match.
+  path_routing:
+    kind: descriptive
+    note: Describes an L7 feature; load_balancer_l7 is what rules match.
+  policy:
+    kind: descriptive
+    note: Describes the node. Rules match policy as a network_placement, not as a role.
+  private_endpoint:
+    kind: descriptive
+    note: Describes the connector's mechanism; connector is what rules match.
+  relational_db:
+    kind: load_bearing
+    note: Matched by CONN-K8S-TO-RELATIONAL-DB.
+  secret_store:
+    kind: load_bearing
+    note: Matched by CONN-K8S-TO-SECRET. SEC-002 fires on its absence.
+  serverless_vpc_connector:
+    kind: load_bearing
+    note: The needs_role on every NEEDS_COMPONENT rule, resolved to a concrete service of
+      the target provider with by_role(...)[0].
+  stream_processing:
+    kind: load_bearing
+    note: Matched by verdict_card's tech-mismatch rules.
+  vm:
+    kind: descriptive
+    note: Describes the compute unit; compute is what rules match.
+  waf:
+    kind: descriptive
+    note: Carried by the azure-waf alias as a feature; no rule matches the role.
+  waf_host:
+    kind: descriptive
+    note: Describes what the edge service can carry; edge_entry is what rules match.
+  wide_column_db:
+    kind: descriptive
+    note: Describes the database model; datastore is what rules match.

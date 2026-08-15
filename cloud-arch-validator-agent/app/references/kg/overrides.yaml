@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Three things that cannot be derived from node properties.
 # Keep this file small. If it starts growing quickly, that is a signal that
 # connectivity-rules.yaml is missing a general rule — fix the rule rather than

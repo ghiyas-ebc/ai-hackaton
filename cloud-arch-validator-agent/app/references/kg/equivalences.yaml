@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Cross-provider equivalents. Read in both directions — no mirrored entries
 # needed.
 # Two things make this file different from a plain equivalence list:

@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Layer 1 — connectivity validity, derived from node properties.
 # Evaluated in order, FIRST MATCH WINS. The ordering is not cosmetic: more
 # specific rules must sit above general rules that would also match.
@@ -225,7 +225,6 @@ rules:
   verdict: ALLOWED
   severity: null
   message: A data pipeline writing to an analytics sink or a datastore.
-
 # Fallback when no rule matches. Deliberately NOT "unknown, review manually" as
 # in the original draft: under a property model, no match means the combination
 # genuinely falls outside every known pattern, not merely that nobody has

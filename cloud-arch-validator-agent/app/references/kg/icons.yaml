@@ -6,7 +6,7 @@
 #
 # To change the graph: use the curator agent, or SQL, then re-run the
 # export. To rebuild a database from this file: db/seed_from_yaml.py.
-#
+
 # Icon metadata for diagram rendering.
 # This file does NOT contain icon artwork. It maps each service_id to a file
 # path inside locally installed official icon sets. The paths are resolved at

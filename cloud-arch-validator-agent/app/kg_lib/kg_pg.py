@@ -40,6 +40,10 @@ TABLES = {
         SELECT service_id, role, ord FROM service_role
         ORDER BY service_id, ord
     """,
+    # Alphabetical rather than grouped by kind: this is the file a reviewer
+    # diffs when a role changes, and a stable order that never reshuffles on a
+    # promotion is worth more than reading load-bearing roles first.
+    "role_catalog": "SELECT role, kind, note FROM role_catalog ORDER BY role",
     "connectivity_rule": """
         SELECT id, seq, when_clause, verdict, severity, message,
                relationship, needs_role, rationale
@@ -254,6 +258,11 @@ def kg_from_rows(rows):
 
     settings = {r["key"]: r["value"] for r in rows["kg_setting"]}
 
+    role_catalog = {
+        r["role"]: _compact({"kind": r["kind"], "note": r["note"]})
+        for r in rows.get("role_catalog") or []
+    }
+
     return KnowledgeGraph(
         services=services,
         conn_rules=conn_rules,
@@ -266,6 +275,7 @@ def kg_from_rows(rows):
         equivalences=equivalences,
         regenerate_roles=settings.get("regenerate_roles") or [],
         icons=icons,
+        role_catalog=role_catalog,
     )
 
 

@@ -241,6 +241,27 @@ def lookup_service(service_id: str) -> dict:
     return out
 
 
+def _check_roles(roles):
+    """Refuse a role filter the catalog does not know. None means it is fine.
+
+    The read path is where a misspelled role does the most damage, and it had
+    no check at all. A filter on `datstore` matched nothing and came back
+    `count: 0` — which these tools explicitly tell the model to treat as an
+    answer rather than a reason to relax the filter. One dropped letter became
+    "no service in the graph has that role", stated confidently to a rep on a
+    client call. That is D6's failure shape on a path with no human in it.
+
+    Reads the catalog already in memory; no database call, and the same pure
+    check the writer uses so the two cannot disagree about what a role is.
+    """
+    named = [r for r in roles if r]
+    if not named:
+        return None
+    return kg_write_module.validate_roles(
+        {r: e.get("kind") for r, e in _KG.role_catalog.items()}, named
+    )
+
+
 def search_services(provider: str = "", category: str = "", role: str = "") -> dict:
     """List services in the knowledge graph, filtered by typed fields.
 
@@ -250,12 +271,18 @@ def search_services(provider: str = "", category: str = "", role: str = "") -> d
     Args:
         provider: 'gcp' or 'azure'. Empty for both.
         category: e.g. 'database', 'compute', 'storage', 'network'.
-        role: e.g. 'connector', 'datastore', 'entrypoint'.
+        role: A role from the catalog, e.g. 'connector', 'datastore'. Call
+            `list_roles` for the set.
 
     Returns:
         {'count': N, 'services': [{id, name, provider, category, roles,
-        network_placement, reachability, region_scope}, ...]}.
+        network_placement, reachability, region_scope}, ...]}, or
+        {'error': 'unknown_role', ...} when the role is not in the catalog.
     """
+    problem = _check_roles([role])
+    if problem:
+        return problem
+
     out = []
     for svc_id, svc in _KG.services.items():
         if provider and svc.get("provider") != provider:
@@ -440,12 +467,19 @@ def add_service_to_kg(
             'managed_service', 'network_fabric', 'connector', 'edge', 'policy'.
         reachability: How it is reached as a target — 'api_endpoint',
             'private_ip', 'public_or_private', or 'n_a'.
-        roles: Functional roles, e.g. ['datastore', 'sql'].
+        roles: Functional roles from the role catalog, e.g. ['datastore',
+            'relational_db']. A role outside the catalog is refused. Call
+            `list_roles` for the set.
         references_url: Provider documentation URL, recorded as the source.
 
     Returns:
-        {'written': True, 'entry': {...}, 'note': ...} on success, or
-        {'written': False, 'error': ..., 'field'/'allowed'/'existing': ...}.
+        {'written': True, 'entry': {...}, 'note': ...} on success, plus
+        'role_warning' when no role given is load-bearing — the entry is
+        written and will answer UNCOVERED wherever it appears, which may be
+        correct. Relay that warning; do not add a role to make it go away.
+
+        {'written': False, 'error': ..., 'field'/'allowed'/'existing': ...} on
+        refusal, with 'did_you_mean' when a role looks like a typo.
     """
     fields = {
         "name": name,
@@ -553,7 +587,8 @@ def query_services(
         region_scope: 'zonal', 'regional', 'multi_region', or 'global'.
         network_placement: e.g. 'in_vpc', 'serverless_offvpc', 'connector'.
         reachability: e.g. 'private_ip', 'api_endpoint', 'public_or_private'.
-        roles_all: Every role listed must be held.
+        roles_all: Every role listed must be held. Roles come from the
+            catalog — call `list_roles` for the set.
         roles_any: At least one role listed must be held.
         unverified_only: Only entries no human has signed off on yet.
 
@@ -561,9 +596,18 @@ def query_services(
         {'count': N, 'services': [...], 'filters': {...}}. An empty result is
         an answer: no service in the graph matches. It is not a reason to relax
         a filter and report something adjacent.
+
+        {'error': 'unknown_role', ...} when a role filter is not in the
+        catalog, with `did_you_mean` where a correction is obvious. This is not
+        an empty result and must not be reported as one — the filter was
+        unanswerable, not unmatched.
     """
     roles_all = roles_all or []
     roles_any = roles_any or []
+    problem = _check_roles(list(roles_all) + list(roles_any))
+    if problem:
+        return problem
+
     filters = {
         "provider": provider,
         "category": category,
@@ -614,6 +658,44 @@ def query_services(
     return {"count": len(out), "services": out, "filters": filters}
 
 
+def list_roles(kind: str = "") -> dict:
+    """List the role vocabulary, split into load-bearing and descriptive.
+
+    Roles are a closed set. `load_bearing` means something in the engine
+    matches the role — a connectivity rule's `when` clause, a `needs_role`, one
+    of the L2-L8 checks, or the tech-mismatch rules — so getting one wrong or
+    leaving it off changes verdicts. `descriptive` roles are carried for a
+    person reading the entry and are read by no rule.
+
+    Use this before asking an engineer which roles a new service holds: the
+    load-bearing list is the short one that has to be right, and every role
+    carries a note saying where it is read.
+
+    Args:
+        kind: 'load_bearing', 'descriptive', or empty for both.
+
+    Returns:
+        {'count': N, 'roles': [{'role', 'kind', 'note', 'services'}, ...]}.
+        `services` counts how many entries currently hold the role.
+    """
+    held = {}
+    for svc in _KG.services.values():
+        for role in svc.get("roles", []):
+            held[role] = held.get(role, 0) + 1
+
+    out = [
+        {
+            "role": role,
+            "kind": entry.get("kind"),
+            "note": entry.get("note"),
+            "services": held.get(role, 0),
+        }
+        for role, entry in _KG.role_catalog.items()
+        if not kind or entry.get("kind") == kind
+    ]
+    return {"count": len(out), "roles": out, "filters": {"kind": kind}}
+
+
 # --------------------------------------------------------------- grouping ----
 # One list per sub-agent. Which tools a sub-agent holds is the boundary that
 # actually enforces the split — an agent cannot be talked into calling a tool it
@@ -635,6 +717,7 @@ EXPLORER_TOOLS = [
     lookup_service,
     search_services,
     query_services,
+    list_roles,
     export_kg_graph,
     check_kg_health,
 ]
@@ -642,6 +725,7 @@ EXPLORER_TOOLS = [
 CURATOR_TOOLS = [
     lookup_service,
     query_services,
+    list_roles,
     add_service_to_kg,
     mark_service_verified,
     propose_equivalence,

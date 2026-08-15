@@ -28,7 +28,8 @@ of the knowledge graph, one of which had gone two decisions stale while staying
 invocable. Postgres is the only source of truth now.
 
 `app/references/kg/*.yaml` still exists and is **generated output** — written by
-`db/export_to_yaml.py`, never edited. See D27.
+`db/export_to_yaml.py`, never edited. See D27. `role-catalog.yaml` joined the set
+under D29 and is generated the same way.
 
 Its users are salespeople and presales engineers who do not design cloud
 architecture for a living, producing material that goes in front of a
@@ -54,7 +55,8 @@ uv run ruff check app tests db
 ```
 
 The graph's own gate is `check_kg_health` (the `check_kg.py` engine): clean
-integrity, **37/37 regression**, and L1 coverage **≥80%** before anything ships.
+integrity, a clean role catalog, **37/37 regression**, and L1 coverage **≥80%**
+before anything ships.
 A coverage drop means a rule silently narrowed. It also reports per-layer
 coverage for L2–L8 (see D23); a layer whose rules stop firing is the same
 failure, hidden from the headline number. An entry flagged `provenance.status
@@ -84,7 +86,8 @@ one either: it chains the pure halves of the seed and the loader.
 4. **Nothing adds a service without a human supplying the judgment fields.**
    *Amended by D26 — this used to read "nothing writes `services.yaml`
    automatically".* The file is no longer the store; the gate is unchanged and
-   now has a CHECK constraint under it. See D6 and D26.
+   now has a CHECK constraint under it, plus a foreign key on `roles`. See D6,
+   D26 and D29.
 5. **`UNCOVERED` and `UNKNOWN_SERVICE` are valid answers.** Never make the
    system guess to avoid them.
 
@@ -498,6 +501,28 @@ convention: it fails when the committed files disagree with the database, and
 orderings that decide verdicts (`service.ord`, `connectivity_rule.seq`) — and
 the 37/37 regression passes through the export unchanged.
 
+*Amended: the round trip was lossy for comments, and the test excluded exactly
+the columns that proved it.* `_normalise` in the drift test dropped `rationale`
+and `note` before comparing rows, on the reasoning that comments do not survive
+a YAML parse. They do survive this one — the seed lifts them out of the raw text
+on purpose — so the exclusion was hiding three defects at once, each of which
+only appears after a full seed-and-re-export cycle. The banner was read back as
+part of each file's `doc:` note, so every cycle wrote it out one more time. An
+entry note reached the next entry's anchor and was therefore collected both as
+that entry's `above` block and as the previous entry's trailing body, and the
+wrong copy won — the WAF note explaining Application Gateway came back attached
+to Azure Load Balancer, which is a plausible annotation on the wrong service and
+worse than none. And a bare `#` inside a note was filtered as decoration, so
+paragraph breaks in the file headers collapsed a little more each time anybody
+rebuilt a database. Nothing failed in any of the three; the documentation just
+degraded, silently, along the path this decision exists to protect. The fix is
+in the export (a blank line separating banner from note, no blank line above an
+entry's) and the seed (skip the banner block, hand a trailing comment run to the
+entry it sits above, keep interior blanks). `_normalise` now compares those
+columns, and `test_a_second_export_is_byte_identical_to_the_first` asserts the
+cycle is stable — accumulation is invisible to a normalised comparison, which is
+why it survived one.
+
 *Rejected: Apache AGE.* A graph extension sounds like the natural fit for a
 knowledge graph and is the wrong tool for this one. D2 is the reason: validity
 here is **derived from node properties at query time**, not stored. The 691
@@ -560,6 +585,117 @@ existed to support. 0003 replaced it with `missing_services`, supplied by the
 caller, which resolved every id against the loaded graph while producing the
 verdict. The database should not be asked to re-derive something the caller
 already knew.
+
+**D29 — Roles are a closed vocabulary split into load-bearing and descriptive,
+and the placement questions are a tree rather than a list.** Both come from the
+same complaint: the graph looked harder to author than it is. It was worth
+checking whether that was true before simplifying anything, and the check
+changed what got done.
+
+*What was not the problem.* The model stores **zero edges**. D2 settled that in
+the beginning — validity is derived from node properties, so adding a service is
+one entry and never N pairs, and the 691 edges `export_kg_graph` returns are
+computed output (D28). Nobody has ever drawn a relation per service. The
+complexity that is actually felt is in the *node*: eight fields, of which three
+cannot be looked up.
+
+*What was measured, and what it ruled out.* Collapsing `network_placement` and
+`reachability` into `category` and `tier` was the obvious simplification and is
+wrong on this data: 6 of 14 `(category, tier)` buckets hold more than one
+`(placement, reachability)` pair. `compute/managed` contains both GKE Autopilot
+(`in_vpc`, `private_ip`) and App Engine (`serverless_offvpc`, `api_endpoint`).
+`database/managed` contains all three of `private_ip`, `public_or_private` and
+`api_endpoint` — and that split *is* the product: `public_or_private` is what
+raises `CONN-SERVERLESS-TO-DUAL-ENDPOINT` and escalates through `SEC-001`, which
+is the finding that gets an architecture rejected in a client security review.
+Category and tier are labels; they carry no network semantics, and merging them
+would have traded the flagship verdict for a shorter enum.
+
+*What the data did support.* `network_placement` nearly determines
+`reachability`: six of the seven values admit exactly one, and only
+`managed_service` genuinely branches. So the curator now walks an ordered
+question tree — policy, edge, connector, fabric, in-VPC, serverless, else
+managed — and *states* the implied reachability for confirmation instead of
+reading out four enum values. This is presentation, not inference: D6 is
+unchanged, the engineer still answers, and the tree exists so they can answer
+once instead of three times. No schema change was involved.
+
+*The catalog.* `roles` was free text, and 19 of the 40 values in the graph are
+matched by something — a connectivity rule's `when`, a `needs_role`,
+`validate.py`'s L2–L8 checks, `verdict_card.py`'s `MISMATCH_RULES`, or
+`regenerate_roles`. The other 21 are labels: `wide_column_db` on Bigtable is
+true, useful to a reader, and read by nothing. `kg.role_catalog` records which
+is which, `service_role.role` is now a foreign key onto it, and
+`add_service_to_kg` requires at least one load-bearing role.
+
+Two failures this catches that nothing did. A misspelled role inserted cleanly:
+`datstore` is structurally a valid string, so `check_integrity` walked past it
+and the node read as fully specified while matching no rule for the rest of its
+life — D6's shape applied to the one judgment field that is a list, and the fix
+is D26's, a refusal at the storage layer no caller can route around. And the
+curator asked for all forty with equal weight, which spends an engineer's
+attention evenly across a set where it is not evenly needed.
+
+`kind` is not a permission. A rule may start matching a descriptive role, at
+which point it is promoted and the curator begins insisting on it —
+`check_role_catalog` fails when a rule matches a role the catalog calls
+descriptive, so the lie cannot persist. Rules lead; the catalog records what
+reads a role, it does not license one. The check is honest about its reach: it
+reads role references out of `connectivity-rules.yaml`, and the engine's Python
+matches cannot be introspected cheaply, which is why every load-bearing entry
+carries a note naming where it is read.
+
+*Amended: the read path was the unguarded one, and the write path was one
+refusal too strict.* The first version put a hard gate on the writer and left
+`query_services` and `search_services` taking model-supplied role strings with
+no check at all. A filter on `datstore` matched nothing and returned `count: 0`
+— and those tools' own docstrings instruct the model that an empty result is an
+answer and not a reason to relax a filter, so one dropped letter became "no
+service in the graph has that role", stated to a rep mid-call. That is D6's
+shape on the path with **no human in it**, which is the wrong way round from
+where the gating was. Both now return `unknown_role` with the allowed set,
+which is not an empty result and says so.
+
+The other correction goes the other way. Refusing an entry whose roles are all
+descriptive was too strict: it is spelled correctly and describes the service
+accurately, and blocking there leaves a curator who wants the write to land one
+step from attaching `compute` to something that is not compute. A *wrong*
+load-bearing role is exactly D6's twenty-confidently-wrong-verdicts case, while
+an entry matching no rule answers UNCOVERED — which invariant #5 calls a correct
+answer, and which the gap record already files as a rule to write. It now writes
+with `role_warning` instead, and the curator is told not to add a role to make
+the warning go away. The `unknown_role` refusal stays: a typo has no defensible
+reading.
+
+*Rejected: pgvector for the typo.* Considered seriously and it is the wrong
+tool, for a reason worth writing down because the option will come up again.
+`datstore` → `datastore` is a dropped letter — edit distance, not meaning.
+Embeddings measure meaning, so the nearest neighbours of `datastore` are
+`object_store`, `cache` and `wide_column_db`: all real roles, all different
+ones. A ranker confidently returning one of those replaces a visible empty
+result with an invisible wrong filter, which is worse than the bug. It would
+also put an embedding call on the runtime path, and that needs provider
+credentials — invariant #3, and D1's original failure returning by a new route:
+no demoing an Azure architecture without a GCP login. Note this is *unlike*
+D27's rejection of AGE, where Cloud SQL's allow-list was the blocker; Cloud SQL
+does allow pgvector, so deployment is not the objection here — the runtime
+dependency is, and it is the more serious one. What ships instead is
+`difflib.get_close_matches` over 40 strings at a 0.75 cutoff: stdlib, no
+extension, no migration, and it resolves every typo tried against it while
+returning nothing for `monitoring` or `blockchain`, which are missing concepts
+rather than misspellings. The suggestion is reported as `did_you_mean` and never
+applied — silently reading `datstore` as `datastore` is the same guess by
+another route, and an invisible one. *If pgvector ever earns a place here it is
+over `gap_record.unresolved_element`, which is open user text that
+`gap_summary` currently groups by exact string; that is authoring-time, off the
+decision path, and embeddable in a batch job.*
+
+*Rejected: a CHECK constraint pinning `placement → reachability`.* Tempting for
+the same reason the tree works — six of seven are functional — but 45 rows is
+thin evidence for forbidding a pair no service happens to hold yet, and the cost
+of being wrong is refusing a legitimate service at write time. The tree gets the
+authoring benefit without the constraint's downside. *Reconsider once the graph
+has enough services that the mapping is observed rather than assumed.*
 
 ## Open questions
 

@@ -42,8 +42,10 @@ sys.path.insert(0, str(_HERE))
 # make the database's contents depend on which copy was more recently edited.
 DEFAULT_KG_DIR = _HERE.parent / "app" / "references" / "kg"
 
-# Insert order matters: everything references service.
+# Insert order matters: everything references service, and service_role now
+# references role_catalog.
 TABLE_ORDER = [
+    "role_catalog",
     "service",
     "service_role",
     "connectivity_rule",
@@ -69,6 +71,17 @@ JSON_COLUMNS = {
     "kg_setting": {"value"},
 }
 
+# Two tables migration 0004 also seeds, because the schema needs them populated
+# before there is a file to seed from: the role vocabulary, which
+# `service_role.role` is a foreign key onto, and that file's own `doc:` row. On
+# a database that has migrated but not been seeded, a plain INSERT collides
+# with the migration's rows. Re-asserting instead of failing keeps the export
+# authoritative for their contents without making the migration wrong.
+UPSERT = {
+    "role_catalog": ("role", ("kind", "note")),
+    "kg_setting": ("key", ("value", "note")),
+}
+
 
 # --------------------------------------------------------------- comments ----
 # PyYAML drops comments, and in this knowledge graph the comments are where the
@@ -77,6 +90,15 @@ JSON_COLUMNS = {
 # what it means. So they are lifted out of the raw text and carried across.
 
 _BANNER = re.compile(r"^[-=*\s]*$")
+
+# First words of the export's own "do not edit" banner. That block is metadata
+# about how the file was produced rather than documentation of what is in it,
+# so it is not part of any `doc:` note. Carrying it in meant the next export
+# printed it twice and the one after that three times.
+# `tests/unit/test_kg_export_drift.py` pins this by asserting export -> seed ->
+# export is byte-identical, so a reworded banner fails there rather than
+# silently starting to accumulate again.
+GENERATED_BANNER_PREFIX = "GENERATED FILE"
 
 
 def _is_decoration(text):
@@ -87,6 +109,26 @@ def _is_decoration(text):
     return "----" in text and len(stripped.split()) <= 3
 
 
+def _keep(text):
+    """A comment line worth carrying: prose, or a paragraph break inside it."""
+    return not (text and _is_decoration(text))
+
+
+def _trim(block):
+    """Drop blank lines at the ends of a block and keep the interior ones.
+
+    A bare `#` inside a note is a paragraph break, and these notes are prose —
+    the field definitions and the reasoning behind them. Treating those the
+    same as a decorative banner ran every paragraph of every file header
+    together into one wall of text on the first re-import.
+    """
+    while block and not block[0]:
+        block.pop(0)
+    while block and not block[-1]:
+        block.pop()
+    return block
+
+
 def _comment_blocks(raw, anchor_re):
     """Map anchor value -> the commentary attached to that entry.
 
@@ -95,11 +137,17 @@ def _comment_blocks(raw, anchor_re):
       above  a contiguous comment block directly over the entry, no blank line
              in between (a comment separated by a blank line belongs to the
              section, not to the entry). This is how architecture-rules.yaml
-             explains a rule.
+             explains a rule, and it is what the export writes.
       inside comment lines within the entry's own body, before the next entry.
-             This is how services.yaml annotates a single node, e.g. the note
-             on Application Gateway explaining why WAF is a feature and not a
-             separate box.
+             This is how the hand-authored services.yaml annotated a single
+             node, e.g. the note on Application Gateway explaining why WAF is
+             a feature and not a separate box.
+
+    The two overlap at one point and the overlap was a bug: a comment run that
+    reaches the next entry is that entry's `above` block *and* sits inside this
+    entry's line range, so every exported note was collected twice and the copy
+    that stuck was the wrong one. `above` wins — a note written directly over
+    an entry is about that entry.
     """
     lines = raw.splitlines()
     anchors = [(i, m.group(1)) for i, line in enumerate(lines)
@@ -113,38 +161,57 @@ def _comment_blocks(raw, anchor_re):
             if not stripped.startswith("#"):
                 break
             text = stripped.lstrip("#").strip()
-            if not _is_decoration(text):
+            if _keep(text):
                 block.append(text)
             j -= 1
         block.reverse()
 
-        end = anchors[pos + 1][0] if pos + 1 < len(anchors) else len(lines)
+        end = len(lines)
+        if pos + 1 < len(anchors):
+            end = anchors[pos + 1][0]
+            # Give back the trailing comment run: it is the next entry's.
+            while end > i + 1 and lines[end - 1].strip().startswith("#"):
+                end -= 1
         for line in lines[i + 1:end]:
             stripped = line.strip()
             if stripped.startswith("#"):
                 text = stripped.lstrip("#").strip()
-                if not _is_decoration(text):
+                if _keep(text):
                     block.append(text)
+        block = _trim(block)
         if block:
             out[key] = "\n".join(block)
     return out
 
 
 def _preamble(raw):
-    """The file's own header comment: what the fields mean and why."""
-    block = []
+    """The file's own header comment: what the fields mean and why.
+
+    Reads the leading comment blocks and returns the first that is not the
+    export's "do not edit" banner. A generated file carries both, in that
+    order, separated by a blank line.
+    """
+    blocks, block = [], []
     for line in raw.splitlines():
         stripped = line.strip()
         if not stripped:
             if block:
-                break
+                blocks.append(block)
+                block = []
             continue
         if not stripped.startswith("#"):
             break
         text = stripped.lstrip("#").strip()
-        if not _is_decoration(text):
+        if _keep(text):
             block.append(text)
-    return "\n".join(block) or None
+    if block:
+        blocks.append(block)
+
+    for candidate in blocks:
+        candidate = _trim(candidate)
+        if candidate and not candidate[0].startswith(GENERATED_BANNER_PREFIX):
+            return "\n".join(candidate)
+    return None
 
 
 # -------------------------------------------------------------- transform ----
@@ -172,6 +239,17 @@ def build_rows(kg_dir=DEFAULT_KG_DIR):
         return yaml.safe_load(raw), raw
 
     rows = {name: [] for name in TABLE_ORDER}
+
+    # -- role vocabulary ------------------------------------------------
+    # Read before services, because every role below has to exist here.
+    roles_doc, roles_raw = read("role-catalog.yaml")
+    for role, entry in (roles_doc.get("roles") or {}).items():
+        rows["role_catalog"].append(
+            {"role": role, "kind": entry["kind"], "note": entry.get("note")}
+        )
+    rows["kg_setting"].append(
+        {"key": "doc:role-catalog", "value": None, "note": _preamble(roles_raw)}
+    )
 
     # -- services -------------------------------------------------------
     services_doc, services_raw = read("services.yaml")
@@ -395,10 +473,10 @@ def apply(conn, rows, replace=False):
             )
         if replace:
             cur.execute(
-                "TRUNCATE service, connectivity_rule, architecture_layer, "
-                "architecture_rule, equivalence, service_alias, "
-                "connection_override, service_alternative, icon_category, "
-                "kg_setting RESTART IDENTITY CASCADE"
+                "TRUNCATE service, role_catalog, connectivity_rule, "
+                "architecture_layer, architecture_rule, equivalence, "
+                "service_alias, connection_override, service_alternative, "
+                "icon_category, kg_setting RESTART IDENTITY CASCADE"
             )
         for table in TABLE_ORDER:
             table_rows = rows[table]
@@ -407,8 +485,16 @@ def apply(conn, rows, replace=False):
                 continue
             cols = list(table_rows[0].keys())
             placeholders = ", ".join(f"%({c})s" for c in cols)
+            on_conflict = ""
+            if table in UPSERT:
+                key, updated = UPSERT[table]
+                on_conflict = (
+                    f" ON CONFLICT ({key}) DO UPDATE SET "
+                    + ", ".join(f"{c} = EXCLUDED.{c}" for c in updated)
+                )
             sql = (
-                f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders})"
+                f"INSERT INTO {table} ({', '.join(cols)}) "
+                f"VALUES ({placeholders}){on_conflict}"
             )
             cur.executemany(sql, [_adapt(table, r) for r in table_rows])
             counts[table] = len(table_rows)

@@ -41,6 +41,8 @@ class FakeCursor:
             self._result = (self._conn.max_ord + 1,)
         elif "UPDATE service" in sql:
             self._result = self._conn.update_returns
+        elif "FROM role_catalog" in sql:
+            self._rows = self._conn.role_catalog
         else:
             self._result = None
 
@@ -51,14 +53,25 @@ class FakeCursor:
     def fetchone(self):
         return self._result
 
+    def fetchall(self):
+        return self._rows
+
 
 class FakeConn:
-    def __init__(self, existing=None, max_ord=0, update_returns=None):
+    def __init__(self, existing=None, max_ord=0, update_returns=None,
+                 role_catalog=None):
         self.executed = []
         self.inserts = []
         self.commits = 0
         self.max_ord = max_ord
         self.update_returns = update_returns
+        # Enough of the vocabulary to exercise both refusals: one load-bearing
+        # role and one descriptive one.
+        self.role_catalog = role_catalog if role_catalog is not None else [
+            ("compute", "load_bearing"),
+            ("datastore", "load_bearing"),
+            ("vm", "descriptive"),
+        ]
         self._existing = existing
         self.existing_row = (
             tuple(existing.get(k) for k in (
