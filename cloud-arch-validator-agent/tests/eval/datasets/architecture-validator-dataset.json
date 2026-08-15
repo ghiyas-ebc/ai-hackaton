@@ -115,6 +115,63 @@
       }
     },
     {
+      "eval_case_id": "E02b-cross-cloud-choices",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Oke, buat Pub/Sub pakai Service Bus aja, dan Cloud Load Balancing-nya yang global L7. Tolong lanjutin translate arsitektur GCP tadi (Cloud Run, Cloud SQL, Pub/Sub, Cloud Load Balancing) ke Azure."
+          }
+        ]
+      },
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A01",
+              "content": {
+                "property": {
+                  "description": "calls translate_architecture now that the ambiguous choices are resolved, instead of asking again"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A02",
+              "content": {
+                "property": {
+                  "description": "honours the stated choices: Service Bus for Pub/Sub, global L7 for Cloud Load Balancing"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A03",
+              "content": {
+                "property": {
+                  "description": "shows VNet Integration emerging from the Azure rules rather than translated one-to-one from a GCP connector"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A04",
+              "content": {
+                "property": {
+                  "description": "surfaces caveats for every PARTIAL equivalent"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A05",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
       "eval_case_id": "E03-unknown-service",
       "prompt": {
         "role": "user",

@@ -17,12 +17,22 @@ def test_dataset_contract_has_source_assertions_for_every_case():
         assert all(r["rubric_id"] and r["content"]["property"]["description"] for r in rubrics)
 
 
-def test_metric_config_uses_built_in_adk_metrics_only():
+def test_metric_config_keeps_only_metrics_that_produced_usable_signal():
+    # The two dropped built-ins errored on most cases in the baseline run; see
+    # the rationale comment in eval_config.yaml.
     config = yaml.safe_load(CONFIG.read_text())
     assert config["metrics_to_run"] == [
-        "final_response_quality",
         "instruction_following",
-        "tool_use_quality",
         "hallucination",
+        "verdict_grounding",
     ]
-    assert "custom_metrics" not in config
+    assert "final_response_quality" not in config["metrics_to_run"]
+    assert "tool_use_quality" not in config["metrics_to_run"]
+
+
+def test_verdict_grounding_is_a_local_deterministic_metric():
+    # Invariant #1 must not be graded by a judge that can be wrong about it.
+    config = yaml.safe_load(CONFIG.read_text())
+    custom = {m["name"]: m for m in config["custom_metrics"]}
+    assert custom["verdict_grounding"]["custom_function_file"] == "verdict_grounding.py"
+    assert (CONFIG.parent / "verdict_grounding.py").exists()

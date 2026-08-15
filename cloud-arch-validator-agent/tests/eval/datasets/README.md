@@ -103,7 +103,7 @@ See the [Evaluation Guide](https://google.github.io/agents-cli/guide/evaluation/
 
 ## Architecture Validator Dataset
 
-`architecture-validator-dataset.json` mirrors all nine cases in `app/evals/evals.json`. Case IDs and Indonesian prompts stay unchanged. `source_assertions` rubric groups preserve each source assertion for case-specific grading.
+`architecture-validator-dataset.json` mirrors all ten cases in `app/evals/evals.json`. Case IDs and Indonesian prompts stay unchanged. `source_assertions` rubric groups preserve each source assertion for case-specific grading. Regenerate it with `python tests/eval/convert_dataset.py` after editing the source; never hand-edit the target.
 
 Validate migration locally:
 
@@ -130,4 +130,24 @@ agents-cli eval compare artifacts/grades/<baseline>.json artifacts/grades/<run>.
 agents-cli eval analyze artifacts/grades/<run>.json
 ```
 
-E02's post-choice translation assertion needs a continued conversation containing user choices. Initial response grading must not mark that assertion passed without follow-up evidence.
+E02's post-choice translation assertion needs a continued conversation containing user choices. Initial response grading must not mark that assertion passed without follow-up evidence. `E02b-cross-cloud-choices` supplies those choices (Service Bus, global L7) so `translate_architecture` is actually exercised; E02 alone only proves the agent asks.
+
+### Metrics
+
+The 2026-08-10 baseline run decided the metric set, and `eval_config.yaml`
+carries the per-metric reasoning. Summary: `instruction_following` and
+`hallucination` are kept, `final_response_quality` and `tool_use_quality` are
+dropped because they errored on 5/9 and 7/9 cases respectively, and
+`verdict_grounding` (local, deterministic — `tests/eval/verdict_grounding.py`)
+was added.
+
+`verdict_grounding` exists because the built-in judges cannot see this project's
+root invariant. In the baseline run E05 rendered a full Verdict Card, cited
+invented rule ids, and said the output came from the rule engine — with no tool
+call anywhere in its trace. `hallucination` scored it 1.0, because the response
+never contradicts the prompt. Grounding a verdict in a tool response is a
+structural fact about the trace, so it is checked in code: score 0.0 if the
+response claims a verdict with no `generate_verdict_card` / `validate_architecture`
+/ `translate_architecture` response behind it, if it cites a rule id absent from
+`app/references/kg/*.yaml`, or if it prints a tool call as text instead of
+invoking it.
