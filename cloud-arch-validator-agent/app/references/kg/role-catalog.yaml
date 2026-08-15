@@ -38,8 +38,9 @@ roles:
     kind: descriptive
     note: Describes the processing style; data_processing is what rules match.
   cache:
-    kind: descriptive
-    note: Describes what the store is for; datastore is what rules match.
+    kind: load_bearing
+    note: Matched by CONN-K8S-TO-CACHE. Promoted from descriptive when that rule was written
+      — the catalog follows the rules rather than licensing them.
   cdn:
     kind: descriptive
     note: Describes the edge service's function; edge_entry is what rules match.

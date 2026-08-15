@@ -121,6 +121,28 @@ def test_validate_reports_all_nine_layers() -> None:
     assert len(layers) == 9
 
 
+def test_a_pod_reaching_a_cache_gets_the_credential_note() -> None:
+    """The gap the role catalog surfaced: `cache` was in no rule at all.
+
+    A pod holding a long-lived credential for a datastore got advice when the
+    datastore was relational and a generic same-VPC note when it was a cache,
+    for no reason other than which roles a rule happened to name.
+
+    Layer 1 is first-match-wins, so this also pins the ordering: below
+    CONN-INVPC-TO-PRIVATE the rule is shadowed on every pair it matches and
+    silently does nothing. `check_kg`'s reachability sweep would fail on that
+    too, but a verdict assertion says which pair is supposed to move.
+    """
+    got = tools.validate_architecture("gke-autopilot>memorystore")["connectivity"][0]
+    assert got["rule_id"] == "CONN-K8S-TO-CACHE"
+    assert got["verdict"] == "ALLOWED_WITH_NOTE"
+
+    # Not widened past pods. A VM reaching the same cache is the plain
+    # same-network case and keeps the note it had.
+    vm = tools.validate_architecture("compute-engine>memorystore")["connectivity"][0]
+    assert vm["rule_id"] == "CONN-INVPC-TO-PRIVATE"
+
+
 def test_unknown_service_is_answered_not_guessed() -> None:
     """An id the KG does not carry is UNKNOWN_SERVICE, never a near match."""
     result = tools.lookup_service("totally-made-up-service")

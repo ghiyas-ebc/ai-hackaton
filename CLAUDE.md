@@ -667,6 +667,33 @@ with `role_warning` instead, and the curator is told not to add a role to make
 the warning go away. The `unknown_role` refusal stays: a typo has no defensible
 reading.
 
+*The catalog immediately earned itself by exposing a rule gap.* Of the seven
+database-model roles in the graph — `relational_db`, `document_db`,
+`wide_column_db`, `global_scale_db`, `cache`, `object_store`, `data_warehouse` —
+exactly one was load-bearing, and only because `CONN-K8S-TO-RELATIONAL-DB`
+happens to name it. Written out as a table that reads as an accident, and it
+was: the verdicts followed the accident rather than the concern.
+
+    gke-autopilot -> cloud-sql     WARNING  use an auth proxy, not static credentials
+    gke-autopilot -> memorystore   INFO     valid if both sit in the same network
+
+Both are a pod holding a long-lived credential for a datastore. The second said
+nothing about it, because `cache` appeared in no rule and the pair fell through
+to the generic same-VPC note. Nothing reported this before, because there was
+nowhere the question "which roles does anything actually read" could be asked.
+
+`CONN-K8S-TO-CACHE` (migration 0005) fills it, and `cache` is promoted to
+load-bearing — which is the promotion path this decision describes, running for
+the first time and in the stated direction: the rule was written, then the
+catalog followed. A separate rule rather than widening the relational one,
+because the remediation genuinely differs — the relational message names an
+auth-proxy sidecar, which is a real product for managed SQL with no counterpart
+for a managed cache, and widening would have meant softening that message until
+it stopped naming the fix. Two rules each saying something true beat one saying
+something vague. It ships at INFO under D14: the severity is reasoned rather
+than measured, it fires on a common shape, and a WARNING that turns out to be
+noise teaches people to skim the whole report.
+
 *Rejected: pgvector for the typo.* Considered seriously and it is the wrong
 tool, for a reason worth writing down because the option will come up again.
 `datstore` → `datastore` is a dropped letter — edit distance, not meaning.

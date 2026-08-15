@@ -152,6 +152,21 @@ rules:
   severity: WARNING
   message: Pod access should go through an auth proxy sidecar rather than connecting straight
     to the database IP with static credentials.
+- id: CONN-K8S-TO-CACHE
+  when:
+    source:
+      any_role:
+      - kubernetes
+    target:
+      any_role:
+      - cache
+  verdict: ALLOWED_WITH_NOTE
+  severity: INFO
+  message: A managed cache is reached with a long-lived auth string by default, and that string
+    tends to live in a manifest or an environment variable rather than in the secret store.
+    Prefer the provider's identity-based authentication with workload identity where the cache
+    supports it; where the auth string is used, mount it from the secret store and keep in-transit
+    encryption on.
 - id: CONN-K8S-TO-SECRET
   when:
     source:
