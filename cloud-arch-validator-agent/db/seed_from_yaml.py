@@ -56,8 +56,6 @@ TABLE_ORDER = [
     "service_alias",
     "connection_override",
     "service_alternative",
-    "icon_category",
-    "service_icon",
     "kg_setting",
 ]
 
@@ -415,34 +413,8 @@ def build_rows(kg_dir=DEFAULT_KG_DIR):
         {"key": "doc:overrides", "value": None, "note": _preamble(ov_raw)}
     )
 
-    # -- icons ----------------------------------------------------------
-    icons_doc, icons_raw = read("icons.yaml")
-    for provider, cats in (icons_doc.get("categories") or {}).items():
-        for cat, definition in cats.items():
-            rows["icon_category"].append(
-                {
-                    "provider": provider,
-                    "category": cat,
-                    "name": definition["name"],
-                    "file": definition["file"],
-                }
-            )
-    for sid, mapping in (icons_doc.get("services") or {}).items():
-        rows["service_icon"].append(
-            {
-                "service_id": sid,
-                "provider": mapping["provider"],
-                "type": mapping["type"],
-                "icon": mapping.get("icon"),
-                "category": mapping.get("category"),
-                "note": mapping.get("note"),
-            }
-        )
     rows["kg_setting"].append(
         {"key": "doc:services", "value": None, "note": _preamble(services_raw)}
-    )
-    rows["kg_setting"].append(
-        {"key": "doc:icons", "value": None, "note": _preamble(icons_raw)}
     )
 
     return rows
@@ -476,7 +448,7 @@ def apply(conn, rows, replace=False):
                 "TRUNCATE service, role_catalog, connectivity_rule, "
                 "architecture_layer, architecture_rule, equivalence, "
                 "service_alias, connection_override, service_alternative, "
-                "icon_category, kg_setting RESTART IDENTITY CASCADE"
+                "kg_setting RESTART IDENTITY CASCADE"
             )
         for table in TABLE_ORDER:
             table_rows = rows[table]

@@ -26,7 +26,6 @@ _APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_APP_DIR / "kg_lib"))
 
 import check_kg as check_kg_module
-import emit_drawio as emit_drawio_module
 import export_kg_graph as export_module
 import kg as kg_module
 import kg_write as kg_write_module
@@ -234,7 +233,7 @@ def lookup_service(service_id: str) -> dict:
                 "similar-sounding service."
             ),
         }
-    out = {"found": True, **{k: v for k, v in node.items() if k != "icon_path"}}
+    out = {"found": True, **node}
     if alias:
         out["alias_of"] = alias.get("resolves_to")
         out["alias_note"] = alias.get("note")
@@ -355,39 +354,31 @@ def export_kg_graph(provider: str = "", include_edges: bool = False) -> dict:
     return graph
 
 
-def render_drawio_diagram(edges: str, environment: str = "poc") -> dict:
-    """Render an architecture as draw.io XML, annotated with validation findings.
-
-    Icon embedding is deliberately off: `--embed-icons` is a known-broken code
-    path in the underlying script and is not exposed here.
-
-    Args:
-        edges: Connections as 'source>target' pairs, comma-separated.
-        environment: 'poc', 'staging', or 'production'.
-
-    Returns:
-        {'format': 'drawio-xml', 'xml': '<mxfile>...'} — the user opens this in
-        draw.io. Do not paste the XML into the reply; hand it over as a file or
-        tell the user it is ready.
-    """
-    parsed = _parse_edges(edges)
-    report = validate_module.validate(parsed, context={"environment": environment}, kg=_KG)
-    xml = emit_drawio_module.emit(
-        report["connectivity"], report, kg=_KG, embed_icons=False
-    )
-    return {"format": "drawio-xml", "xml": xml}
-
-
 def render_ascii_diagram(
     edges: str,
     environment: str = "poc",
     ascii_only: bool = False,
     width: int = 100,
 ) -> dict:
-    """Render validated architecture as deterministic terminal text.
+    """Render a validated architecture as a deterministic ASCII flowchart.
 
-    Rendering formats rule-engine output only. It never infers validity, severity,
-    service equivalence, or missing graph elements.
+    Boxes carry the service name; the arrows carry the shape. Ids, typed fields,
+    connection verdicts and findings are listed underneath, where they do not
+    have to fit inside a border.
+
+    Rendering formats rule-engine output only. It never infers validity,
+    severity, service equivalence, or missing graph elements. A service the
+    graph does not know is drawn under the id given and called out as
+    UNKNOWN_SERVICE rather than dropped from the picture.
+
+    Args:
+        edges: Connections as 'source>target' pairs, comma-separated.
+        environment: 'poc', 'staging', or 'production'.
+        ascii_only: Transliterate to 7-bit ASCII, one character per character,
+            for places that mangle box-drawing glyphs.
+        width: Bounds the text below the chart. The chart's own width comes
+            from the layout — a wide fan-out needs the columns it needs, and
+            wrapping a diagram breaks it rather than fits it.
     """
     parsed = _parse_edges(edges)
     report = validate_module.validate(parsed, context={"environment": environment}, kg=_KG)
@@ -733,9 +724,9 @@ CURATOR_TOOLS = [
 ]
 
 # Every tool any agent can reach, de-duplicated. Used by tests asserting on the
-# exposure surface — notably that render_drawio_diagram is not in it, because
-# `--embed-icons` is a known-broken path and a broken diagram in front of a
-# client is worse than no diagram.
+# exposure surface. There is one renderer now: the draw.io emitter was never
+# reachable from any agent, carried a known-broken icon path, and needed an
+# icon mapping the graph no longer stores.
 ALL_TOOLS = list(
     dict.fromkeys(VALIDATION_TOOLS + EXPLORER_TOOLS + CURATOR_TOOLS)
 )

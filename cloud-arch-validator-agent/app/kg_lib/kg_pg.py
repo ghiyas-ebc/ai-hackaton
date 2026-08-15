@@ -77,14 +77,6 @@ TABLES = {
     "service_alternative": """
         SELECT id, a_id, b_id, decision FROM service_alternative ORDER BY id
     """,
-    "icon_category": """
-        SELECT provider, category, name, file FROM icon_category
-        ORDER BY provider, category
-    """,
-    "service_icon": """
-        SELECT service_id, provider, type, icon, category, note
-        FROM service_icon ORDER BY service_id
-    """,
     "kg_setting": "SELECT key, value, note FROM kg_setting ORDER BY key",
 }
 
@@ -239,23 +231,6 @@ def kg_from_rows(rows):
         for r in rows["service_alternative"]
     ]
 
-    icons = {"categories": {}, "services": {}}
-    for r in rows["icon_category"]:
-        icons["categories"].setdefault(r["provider"], {})[r["category"]] = {
-            "name": r["name"],
-            "file": r["file"],
-        }
-    for r in rows["service_icon"]:
-        icons["services"][r["service_id"]] = _compact(
-            {
-                "provider": r["provider"],
-                "type": r["type"],
-                "icon": r["icon"],
-                "category": r["category"],
-                "note": r["note"],
-            }
-        )
-
     settings = {r["key"]: r["value"] for r in rows["kg_setting"]}
 
     role_catalog = {
@@ -274,7 +249,6 @@ def kg_from_rows(rows):
         alternatives=alternatives,
         equivalences=equivalences,
         regenerate_roles=settings.get("regenerate_roles") or [],
-        icons=icons,
         role_catalog=role_catalog,
     )
 

@@ -83,6 +83,10 @@ one either: it chains the pure halves of the seed and the loader.
    provider account needed to run the tool, and nothing that makes demoing an
    Azure architecture require a GCP login. A DSN is not a cloud SDK. `tools/` is
    exempt: it runs at authoring time and is excluded from the shipped zip.
+   `retroflow` (with `networkx` and `pillow`) joined under D30 for diagram
+   layout and passes the same test: no provider, no credentials, no network.
+   The test is what a dependency *reaches*, not how many there are — but each
+   one still has to earn its place, and D30 says what that one bought.
 4. **Nothing adds a service without a human supplying the judgment fields.**
    *Amended by D26 — this used to read "nothing writes `services.yaml`
    automatically".* The file is no longer the store; the gate is unchanged and
@@ -213,7 +217,12 @@ second copy of the data living anywhere else — one file, one write path,
 whether the edit came from a person or from `-add`'s agent-assisted flow.
 
 **D13 — Verify rendering against a small real subset before trusting it
-broadly.** `references/rendering.md`'s layout rules are marked unverified
+broadly.** *Superseded by D30: the draw.io emitter, its icon mapping and
+`references/rendering.md` are all deleted, and the one renderer that ships does
+not let us choose a layout to verify. The reasoning below is preserved because
+its instinct was right and was never acted on — nobody ever opened the output,
+which is how the emitter reached deletion still carrying an undiagnosed bug.*
+`references/rendering.md`'s layout rules are marked unverified
 heuristics, and nobody has opened `emit_drawio.py`'s output in real draw.io
 to confirm icons/layout actually look right. Rather than verify all 45
 services up front, verify the ~10 most likely to appear in an actual sales
@@ -724,15 +733,69 @@ of being wrong is refusing a legitimate service at write time. The tree gets the
 authoring benefit without the constraint's downside. *Reconsider once the graph
 has enough services that the mapping is observed rather than assumed.*
 
+**D30 — One renderer, and it draws an actual flowchart. The draw.io emitter and
+the whole icon surface are deleted.** Two findings, one cause.
+
+*What shipped was not a diagram.* `render_ascii_diagram` drew every service as a
+full-width box, stacked vertically, and **no edge between any of them**. The
+topology — the thing a reader opens a diagram to see — existed only as a list of
+sentences underneath. It passed its tests because the tests asserted that the
+service names and the findings appeared, which they did.
+
+`retroflow` replaces the hand-rolled layout. Boxes carry the service name and
+nothing else; ids, typed fields, connection verdicts and findings sit below the
+chart where they do not have to fit inside a border. The cost is two runtime
+dependencies, `networkx` and `pillow`, and pillow is a compiled extension
+imported eagerly for a PNG export this project does not use. That is worth
+naming rather than waving through, but it is not an invariant #3 breach: neither
+is a cloud client and neither needs credentials, so the tool still runs with no
+provider account.
+
+The property that decided it is determinism. The layout is Sugiyama, not
+force-directed, and produces byte-identical output across processes under a
+randomised `PYTHONHASHSEED` — `test_the_layout_is_stable_across_processes` pins
+that, in subprocesses, because in-process repetition cannot see a layout that
+walks a set. This output goes into material a presales engineer puts in front of
+a client's architect; a chart that reshuffles between two runs of the same input
+cannot be reviewed or diffed.
+
+*Edge routing is not configurable and that was accepted.* Three or more edges
+leaving one node merge into a shared run (`└─┴────┬`). Twelve spacing and
+direction configurations produced the same junction count — the knobs move
+whitespace, not routing — and `EdgeRouter()` and `SugiyamaLayout()` take no
+arguments. `direction="LR"` is worse: it routes edges *through* other edges'
+junctions, which is ambiguous rather than merely dense. The typical shapes this
+tool renders — linear three, four with a connector, fan-out of two — come out
+with zero crossings, and the merge loses no information. Accepted on D13's own
+instinct: do not engineer around a problem that real client material has not
+produced yet.
+
+*The icon surface went with the emitter, and it should have gone sooner.* The
+draw.io path was exposed to **no agent** — `test_agent_boundaries.py` asserted
+that deliberately, because `--embed-icons` was known broken and never diagnosed.
+So a renderer nobody could reach was holding up `icon_category` and
+`service_icon`, 55 rows nothing read, one of the seven generated YAML files, a
+`doc:icons` header, two sections of the health check the graph's gate ran on
+every change, a ten-case regression fixture, and an insert on the curator's
+write path that existed only so adding a service would not make the next health
+check report the graph unclean over a missing icon row. Migration 0006 drops the
+tables. Recoverable if a graphical emitter returns: the mapping came from the
+providers' published icon sets, and 0001 and the last exported `icons.yaml` are
+both in git history.
+
+*Two rendering bugs fixed on the way through, both of which reached client-
+facing output.* `PORT-002`'s detail is a list of dicts and was rendered by
+`repr` — braces, quotes and all — into the findings section. And the ASCII
+transliteration encoded with `errors="replace"` and then rewrote `?` as `_`,
+which cannot tell an unencodable character from a question mark somebody typed:
+`selection_criteria` reading "Which database engine is in use?" arrived as "in
+use_". Accents now decompose and their marks drop, which is transliteration
+rather than loss.
+
 ## Open questions
 
 Genuinely unresolved. Do not present any of these as settled.
 
-- **`emit_drawio.py --embed-icons` is broken** (backlog, not investigated).
-  Plain output (no icon embedding) works as intended. `--embed-icons` base64s
-  SVGs found via `kg.icon_for()` into the output — something in that path
-  fails; not yet diagnosed which part (icon resolution, path lookup, or the
-  base64/XML embedding itself).
 - **`cloud-architecture-validator-init`'s literal source URL is still
   unpicked.** D19 fixed the shape (a public GCS object link or GitHub
   Release asset link, plain HTTPS `GET`, no SDK) — which specific URL,

@@ -52,7 +52,7 @@ export = _load("export_to_yaml", "export_to_yaml.py")
 ATTRIBUTES = [
     "services", "conn_rules", "conn_fallback", "arch_rules", "arch_layers",
     "aliases", "overrides", "alternatives", "regenerate_roles",
-    "equivalences", "icons", "role_catalog",
+    "equivalences", "role_catalog",
 ]
 
 
@@ -145,7 +145,7 @@ def test_the_banner_stays_out_of_the_documentation(reexported_rows):
     it was glued to. The separator between them is what makes either avoidable.
     """
     docs = [r for r in reexported_rows["kg_setting"] if r["key"].startswith("doc:")]
-    assert len(docs) == 7
+    assert len(docs) == 6
     for row in docs:
         assert row["note"], f"{row['key']} came back empty"
         assert "GENERATED FILE" not in row["note"]

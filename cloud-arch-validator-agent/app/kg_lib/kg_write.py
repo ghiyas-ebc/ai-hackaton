@@ -258,22 +258,6 @@ def add_service(conn, fields, sources=None, generated_by="agent:kg-curator"):
             "INSERT INTO service_role (service_id, role, ord) VALUES (%s, %s, %s)",
             [(service_id, role, i) for i, role in enumerate(fields["roles"])],
         )
-        # Every service needs an icon mapping or the integrity check reports the
-        # whole graph unclean over one new entry. `generic` is the honest value:
-        # nobody has looked up whether the provider ships an icon for this, and
-        # the graph already uses `generic` for services where none exists. A
-        # curator can promote it to `core` later; leaving the row out would make
-        # the next `check_kg_health` call read as though the write broke
-        # something.
-        cur.execute(
-            "INSERT INTO service_icon (service_id, provider, type, note) "
-            "VALUES (%s, %s, 'generic', %s)",
-            (
-                service_id,
-                fields["provider"],
-                "Icon not yet mapped for this entry; drawn as a generic shape.",
-            ),
-        )
     conn.commit()
 
     result = {

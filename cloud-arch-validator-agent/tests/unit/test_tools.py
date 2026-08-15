@@ -182,12 +182,11 @@ def test_export_graph_can_be_filtered_by_provider() -> None:
     assert all(n["provider"] == "gcp" for n in gcp["nodes"])
 
 
-def test_terminal_renderer_contract_and_drawio_is_not_agent_exposed() -> None:
+def test_terminal_renderer_contract() -> None:
     result = tools.render_ascii_diagram("cloud-run>cloud-sql", ascii_only=True)
     assert result["format"] == "terminal"
     assert result["diagram"].isascii()
     assert tools.render_ascii_diagram in tools.ALL_TOOLS
-    assert tools.render_drawio_diagram not in tools.ALL_TOOLS
 
 
 def test_kg_health_gate_passes() -> None:

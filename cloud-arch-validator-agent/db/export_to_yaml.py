@@ -273,24 +273,6 @@ def build_documents(rows):
         ],
     }
 
-    # -- icons -------------------------------------------------------------
-    categories = {}
-    for r in rows["icon_category"]:
-        categories.setdefault(r["provider"], {})[r["category"]] = {
-            "name": r["name"],
-            "file": r["file"],
-        }
-    icon_services = {
-        r["service_id"]: _compact({
-            "provider": r["provider"],
-            "type": r["type"],
-            "icon": r["icon"],
-            "category": r["category"],
-            "note": r["note"],
-        })
-        for r in rows["service_icon"]
-    }
-
     # -- role catalog ------------------------------------------------------
     role_catalog = {
         r["role"]: _compact({"kind": r["kind"], "note": r["note"]})
@@ -312,9 +294,6 @@ def build_documents(rows):
             }),
         "overrides.yaml":
             _header(doc_notes, "doc:overrides") + _dump(overrides_doc),
-        "icons.yaml":
-            _header(doc_notes, "doc:icons")
-            + _dump({"categories": categories, "services": icon_services}),
         "role-catalog.yaml":
             _header(doc_notes, "doc:role-catalog")
             + _dump({"roles": role_catalog}),
