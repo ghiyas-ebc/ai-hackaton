@@ -22,13 +22,24 @@
 #
 # Restore either once the critique parser stops failing on long markdown
 # responses; both are Agent Platform built-ins, nothing here forks them.
+#
+# Added 2026-08-15, alongside E10-E13 (curator/explorer coverage):
+#   kg_write_grounding     deterministic, local; same reasoning as
+#                          verdict_grounding but for the curator's write
+#                          boundary -- whether a write/refusal/warning claim
+#                          in the response is backed by the actual
+#                          add_service_to_kg/query_services/search_services
+#                          response in the trace.
 metrics_to_run:
   - instruction_following
   - hallucination
   - verdict_grounding
+  - kg_write_grounding
 
 custom_metrics:
   # Deterministic, no judge, no network. See verdict_grounding.py for why this
   # is code rather than a rubric.
   - name: verdict_grounding
     custom_function_file: verdict_grounding.py
+  - name: kg_write_grounding
+    custom_function_file: kg_write_grounding.py

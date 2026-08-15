@@ -103,7 +103,7 @@ See the [Evaluation Guide](https://google.github.io/agents-cli/guide/evaluation/
 
 ## Architecture Validator Dataset
 
-`architecture-validator-dataset.json` mirrors all ten cases in `app/evals/evals.json`. Case IDs and Indonesian prompts stay unchanged. `source_assertions` rubric groups preserve each source assertion for case-specific grading. Regenerate it with `python tests/eval/convert_dataset.py` after editing the source; never hand-edit the target.
+`architecture-validator-dataset.json` mirrors all fourteen cases in `app/evals/evals.json`. Case IDs and Indonesian prompts stay unchanged. `source_assertions` rubric groups preserve each source assertion for case-specific grading. A source case may also carry `prior_turns` (a fixed conversation prefix) instead of starting fresh — `convert_dataset.py` turns that into the Shape B `agent_data.turns` described above; see `E02b-cross-cloud-choices` below for why. Regenerate the target with `python tests/eval/convert_dataset.py` after editing the source; never hand-edit the target.
 
 Validate migration locally:
 
@@ -130,7 +130,21 @@ agents-cli eval compare artifacts/grades/<baseline>.json artifacts/grades/<run>.
 agents-cli eval analyze artifacts/grades/<run>.json
 ```
 
-E02's post-choice translation assertion needs a continued conversation containing user choices. Initial response grading must not mark that assertion passed without follow-up evidence. `E02b-cross-cloud-choices` supplies those choices (Service Bus, global L7) so `translate_architecture` is actually exercised; E02 alone only proves the agent asks.
+E02's post-choice translation assertion needs a continued conversation containing user choices. Initial response grading must not mark that assertion passed without follow-up evidence. `E02b-cross-cloud-choices` is a genuine Shape-B continuation of E02's own conversation (fixed `prior_turns` in the source, `agent_data.turns` in the target) supplying those choices (Service Bus, global L7) so `translate_architecture` is actually exercised; E02 alone only proves the agent surfaces the choice.
+
+**`agents-cli` v1.1.0's own `eval generate` cannot run `E02b` end to end.** Its
+`_inference_runner.py` crashes (`'str' object has no attribute 'get'` in
+`_extract_new_events_from_partial`) specifically on this Shape-B case, and the
+crash is outside the script's own error handling, so it aborts the whole
+`generate` run rather than skipping the one case. Confirmed this is the CLI
+wrapper, not the dataset or the underlying SDK: calling
+`vertexai.Client(...).evals.run_inference` directly on the same case succeeds
+and returns a correct multi-turn result. Until the CLI fixes this, generate
+against a dataset excluding `E02b` for the CLI path, and verify `E02b`
+separately via a direct `run_inference` call (or accept it stays unverified by
+this pipeline for now).
+
+E10-E13 close a coverage gap found on the 2026-08-15 run: `curator_agent`'s entire write path (`add_service_to_kg`, its `unknown_role` refusal, its `role_warning` case) and `explorer_agent`'s typed query/health tools (`search_services`, `query_services`, `check_kg_health`) had zero eval cases despite being the system's one human-gated write boundary. E10 and E12 call `add_service_to_kg` for real against whatever Postgres `CAV_PG_DSN` points at (E11's typo is refused before any insert, so it never writes) — the first `agents-cli eval generate` run after a fresh seed writes `Cloud Filestore` (E10) and `Cloud CDN` (E12); every run after that hits `already_exists` instead. Assertions and `kg_write_grounding` both treat `already_exists` as a legitimate non-failure outcome, but if you want to see the fresh-write path again (provenance/role-warning wording), reseed first: `uv run python db/seed_from_yaml.py --replace` (plain `seed_from_yaml.py` refuses to run against a non-empty database). Do this after any local verification run, too — a drifted database fails `test_kg_export_drift.py` and one `test_role_catalog.py` assertion, neither of which is about your change.
 
 ### Metrics
 
@@ -151,3 +165,12 @@ response claims a verdict with no `generate_verdict_card` / `validate_architectu
 / `translate_architecture` response behind it, if it cites a rule id absent from
 `app/references/kg/*.yaml`, or if it prints a tool call as text instead of
 invoking it.
+
+`kg_write_grounding` (added 2026-08-15, alongside E10-E13 — see
+`tests/eval/kg_write_grounding.py`) applies the same reasoning to the curator's
+write boundary: whether a service was actually written, refused for an unknown
+role, or written with a role warning is a fact about which `add_service_to_kg`
+/ `query_services` / `search_services` response came back in the trace, not
+something a judge can settle from response text. Score 0.0 if the response
+claims success, a role-typo refusal, or a role warning with no matching trace
+response behind it.

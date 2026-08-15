@@ -43,6 +43,21 @@ VERDICT_MARKERS = (
 # actual rule set was invented by the model.
 RULE_ID_RE = re.compile(r"\b(?:L[0-9]|[A-Z]{3,4})-[A-Z0-9-]{2,}\b")
 
+# A layer-to-layer range (L1-L8, L2-L8, L0-L8, ...) is this project's own prose
+# shorthand for "layers X through Y" (see CLAUDE.md's D23), not a single rule
+# id -- exclude it explicitly rather than flagging every health-report summary
+# that describes coverage across a span of layers.
+_LAYER_RANGE_RE = re.compile(r"^L[0-9]-L[0-9]$")
+
+
+def _looks_like_a_rule_id(candidate: str) -> bool:
+    if _LAYER_RANGE_RE.match(candidate):
+        return False
+    # Every real id (a layer id like L4, or PREFIX-NNN-SLUG) carries a digit
+    # somewhere. An all-letter match sharing the same dashed shape -- most
+    # often a date-format placeholder like YYYY-MM-DD -- is not a rule id.
+    return any(ch.isdigit() for ch in candidate)
+
 def _kg_dir() -> Path:
     """Locate `app/references/kg` without relying on `__file__`.
 
@@ -131,7 +146,8 @@ def evaluate(instance):
             f"{'/'.join(sorted(VERDICT_TOOLS))} response is in the trace"
         )
 
-    invented = sorted(set(RULE_ID_RE.findall(text)) - _known_rule_ids())
+    candidates = {m for m in RULE_ID_RE.findall(text) if _looks_like_a_rule_id(m)}
+    invented = sorted(candidates - _known_rule_ids())
     if invented:
         problems.append(f"cites rule ids absent from the rule set: {', '.join(invented)}")
 

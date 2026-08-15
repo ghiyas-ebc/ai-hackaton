@@ -25,6 +25,7 @@ def test_metric_config_keeps_only_metrics_that_produced_usable_signal():
         "instruction_following",
         "hallucination",
         "verdict_grounding",
+        "kg_write_grounding",
     ]
     assert "final_response_quality" not in config["metrics_to_run"]
     assert "tool_use_quality" not in config["metrics_to_run"]
@@ -36,3 +37,12 @@ def test_verdict_grounding_is_a_local_deterministic_metric():
     custom = {m["name"]: m for m in config["custom_metrics"]}
     assert custom["verdict_grounding"]["custom_function_file"] == "verdict_grounding.py"
     assert (CONFIG.parent / "verdict_grounding.py").exists()
+
+
+def test_kg_write_grounding_is_a_local_deterministic_metric():
+    # The curator's write boundary must not be graded by a judge that can only
+    # see response text, not which tool response actually came back.
+    config = yaml.safe_load(CONFIG.read_text())
+    custom = {m["name"]: m for m in config["custom_metrics"]}
+    assert custom["kg_write_grounding"]["custom_function_file"] == "kg_write_grounding.py"
+    assert (CONFIG.parent / "kg_write_grounding.py").exists()

@@ -11,7 +11,7 @@
 
 From repository root, inspect source and target counts, IDs, prompts, and assertion mappings with the migration validation test/check introduced by implementation.
 
-Expected result: 9 source cases, 9 target cases, unique IDs, exact prompt preservation, zero unmapped assertions.
+Expected result: 14 source cases, 14 target cases, unique IDs, exact prompt preservation (or, for the one Shape-B case, exact prior-turn and follow-up preservation), zero unmapped assertions. See the 2026-08-15 addendum in `plan.md` — this count grew from the original 9 twice: once when `E02b-cross-cloud-choices` was added, again when `E10`-`E13` closed a curator/explorer coverage gap.
 
 ## 2. Generate traces
 
@@ -62,5 +62,10 @@ Use when enough failures exist to cluster root causes. Do not use analysis outpu
 - E06 grades provider clarification instead of defaulting to GCP.
 - E08 grades stated assumptions and uncertainty tier.
 - E09 grades mismatch and automatic Gap Report behavior.
-- E02 follow-up behavior remains marked unverified until user choice is supplied and subsequent trace is evaluated.
+- E02 grades that the ambiguous Pub/Sub and Cloud Load Balancing choices are surfaced, not silently picked; E02b is a genuine Shape-B continuation of E02's own conversation, and its follow-up assertions (choices honoured, VNet Integration) are only evaluated with that continuation present — not on E02's initial response alone.
+- E10 grades a curator happy-path add (`add_service_to_kg` written, provenance unverified).
+- E11 grades the curator's `unknown_role` refusal on a typo'd role, including the `did_you_mean` correction.
+- E12 grades the curator's `role_warning` path for a correctly-spelled but purely descriptive role.
+- E13 grades explorer's typed `search_services`/`query_services` filtering and `check_kg_health` reporting.
+- `kg_write_grounding` (E10-E13) and `verdict_grounding` (all cases) both fail a case whose response claims something the trace does not back, independent of judge opinion.
 - Existing deterministic unit/integration tests remain unchanged and pass.

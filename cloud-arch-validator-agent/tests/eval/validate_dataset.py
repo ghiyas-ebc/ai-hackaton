@@ -19,6 +19,24 @@ def load_target(path: Path = TARGET) -> list[dict]:
     return payload["eval_cases"]
 
 
+def _validate_shape_b(case_id: str, source_case: dict, target_case: dict) -> None:
+    prior_turns = source_case["prior_turns"]
+    events = target_case.get("agent_data", {}).get("turns", [{}])[0].get("events", [])
+    # prior_turns become every event except the last; the last event is the
+    # follow-up prompt appended by convert_dataset.py.
+    if len(events) != len(prior_turns) + 1:
+        raise AssertionError(f"turn count differs for {case_id}")
+    for turn, event in zip(prior_turns, events[:-1]):
+        expected_author = "user" if turn["role"] == "user" else "agent"
+        text = (event.get("content", {}).get("parts") or [{}])[0].get("text")
+        if event.get("author") != expected_author or text != turn["text"]:
+            raise AssertionError(f"prior turn changed for {case_id}")
+    last = events[-1]
+    last_text = (last.get("content", {}).get("parts") or [{}])[0].get("text")
+    if last.get("author") != "user" or last_text != source_case["prompt"]:
+        raise AssertionError(f"follow-up prompt changed for {case_id}")
+
+
 def validate(source_path: Path = SOURCE, target_path: Path = TARGET) -> None:
     source = load_source(source_path)
     target = load_target(target_path)
@@ -33,11 +51,15 @@ def validate(source_path: Path = SOURCE, target_path: Path = TARGET) -> None:
         raise AssertionError("source and target IDs differ")
 
     for target_case in target:
-        source_case = source_by_id[target_case["eval_case_id"]]
-        prompt = target_case.get("prompt", {})
-        text = (prompt.get("parts") or [{}])[0].get("text")
-        if prompt.get("role") != "user" or text != source_case["prompt"]:
-            raise AssertionError(f"prompt changed for {target_case['eval_case_id']}")
+        case_id = target_case["eval_case_id"]
+        source_case = source_by_id[case_id]
+        if source_case.get("prior_turns"):
+            _validate_shape_b(case_id, source_case, target_case)
+        else:
+            prompt = target_case.get("prompt", {})
+            text = (prompt.get("parts") or [{}])[0].get("text")
+            if prompt.get("role") != "user" or text != source_case["prompt"]:
+                raise AssertionError(f"prompt changed for {case_id}")
         rubrics = target_case.get("rubric_groups", {}).get("source_assertions", {}).get("rubrics", [])
         if len(rubrics) != len(source_case["assertions"]):
             raise AssertionError(f"assertion count differs for {target_case['eval_case_id']}")

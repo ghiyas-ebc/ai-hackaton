@@ -1,13 +1,13 @@
 {
   "skill_name": "cloud-architecture-validator",
-  "note": "Prompts are written the way a salesperson or presales engineer would actually phrase them, not as technical specifications. Assertions target checkable behaviour, not diagram aesthetics. Prompts are kept in Indonesian on purpose: the skill instructions are English, but the skill must reply in the user's language, and these evals verify that.",
+  "note": "Prompts are written the way a salesperson or presales engineer would actually phrase them, not as technical specifications. Assertions target checkable behaviour, not diagram aesthetics. Prompts are kept in Indonesian on purpose: the skill instructions are English, but the skill must reply in the user's language, and these evals verify that. Assertions are written to be answerable from the final response text alone — a case needing a trace-only fact (which tool ran, what args it got) either has that fact checked by a deterministic custom metric (see tests/eval/verdict_grounding.py, tests/eval/kg_write_grounding.py) or is reworded to a text-observable proxy, because an LLM judge grading only response text cannot see the trace. A case may carry `prior_turns` instead of starting fresh — a fixed conversation prefix (see E02b) that `convert_dataset.py` turns into Agent CLI Shape B (`agent_data.turns`), used only where a follow-up genuinely cannot be tested in one turn.",
   "evals": [
     {
       "id": "E01-serverless-db",
       "prompt": "Tolong bikinin diagram arsitektur GCP buat proposal klien: ada web app, backend-nya pakai Cloud Run, terus connect ke Cloud SQL. Di depannya ada load balancer.",
       "assertions": [
-        "runs scripts/validate.py rather than judging validity itself",
-        "inserts Serverless VPC Access on the Cloud Run -> Cloud SQL path instead of drawing a direct line",
+        "cites specific rule-engine findings by id and severity (e.g. SEC-001, SEC-002) rather than a generic safety disclaimer",
+        "recommends Serverless VPC Access as the remediation for the Cloud Run -> Cloud SQL public-path finding",
         "explains that a public path to the database will become a security-review finding",
         "reports at least one layer-2 finding (the absent secret store)",
         "replies in Indonesian"
@@ -15,21 +15,32 @@
     },
     {
       "id": "E02-cross-cloud",
-      "prompt": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Yang di GCP: Cloud Run, Cloud SQL, Pub/Sub, sama Cloud Load Balancing.",
+      "prompt": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Alurnya: Cloud Load Balancing ke Cloud Run, Cloud Run ke Cloud SQL, dan Cloud Run ke Pub/Sub.",
       "assertions": [
-        "runs scripts/translate.py",
-        "ASKS the user about Pub/Sub (Service Bus vs Event Grid) and Cloud Load Balancing (L4 / regional L7 / global L7) instead of choosing",
-        "does not translate GCP connectors one by one",
-        "after the choices are given, shows VNet Integration emerging from the Azure rules",
-        "surfaces caveats for every PARTIAL equivalent"
+        "resolves 'Pub/Sub' and 'Cloud Load Balancing' to their real knowledge-graph ids, or explicitly says they could not be resolved, rather than inventing plausible-looking ids",
+        "surfaces the Pub/Sub target (Service Bus vs Event Grid) as an open decision rather than silently picking one",
+        "surfaces the Cloud Load Balancing tier (L4 / regional L7 / global L7) as an open decision rather than silently picking one",
+        "does not translate GCP connectors one-to-one -- explains that the target-side connector is decided by Azure's own rules rather than carried over directly",
+        "surfaces caveats for every PARTIAL equivalent it lists"
       ]
     },
     {
       "id": "E02b-cross-cloud-choices",
+      "prior_turns": [
+        {
+          "role": "user",
+          "text": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Alurnya: Cloud Load Balancing ke Cloud Run, Cloud Run ke Cloud SQL, dan Cloud Run ke Pub/Sub."
+        },
+        {
+          "role": "agent",
+          "text": "Sebelum saya terjemahkan, ada dua keputusan yang perlu dikonfirmasi karena masing-masing punya lebih dari satu padanan di Azure: (1) Pub/Sub bisa jadi Azure Service Bus (kalau butuh urutan/pengiriman terjamin) atau Azure Event Grid (kalau cuma distribusi event ringan) -- yang mana? (2) Cloud Load Balancing-nya: Azure Front Door (L7 global), Azure Application Gateway (L7 regional), atau Azure Load Balancer (L4)? Begitu Anda konfirmasi, saya jalankan lagi terjemahannya dengan pilihan itu."
+        }
+      ],
       "prompt": "Oke, buat Pub/Sub pakai Service Bus aja, dan Cloud Load Balancing-nya yang global L7. Tolong lanjutin translate arsitektur GCP tadi (Cloud Run, Cloud SQL, Pub/Sub, Cloud Load Balancing) ke Azure.",
       "assertions": [
         "calls translate_architecture now that the ambiguous choices are resolved, instead of asking again",
-        "honours the stated choices: Service Bus for Pub/Sub, global L7 for Cloud Load Balancing",
+        "honours the stated choice for Pub/Sub: Service Bus",
+        "honours the stated choice for Cloud Load Balancing: global L7",
         "shows VNet Integration emerging from the Azure rules rather than translated one-to-one from a GCP connector",
         "surfaces caveats for every PARTIAL equivalent",
         "replies in Indonesian"
@@ -74,8 +85,8 @@
       "id": "E07-not-a-diagram-request",
       "prompt": "Apa bedanya Event Grid sama Service Bus?",
       "assertions": [
-        "answers directly from references/azure.md",
-        "does not force a diagram or run the validator unnecessarily"
+        "explains the difference between Event Grid and Service Bus in terms of use case (event distribution vs. reliable message queuing/ordering), consistent with their knowledge-graph roles",
+        "does not include an architecture diagram or a validation findings table in the reply"
       ]
     },
     {
@@ -98,6 +109,48 @@
         "surfaces a mismatch entry naming WebSockets as the stated choice and the actual REST/request-response fit as the real need",
         "does not silently answer only the literal connectivity question while ignoring the mismatch",
         "does not ask permission before the Gap Report logging already performed by the tool call",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E10-curator-add-happy-path",
+      "prompt": "Ada service GCP baru yang belum ada di knowledge graph kita: Cloud Filestore. Menurut engineer, kategorinya storage, tier managed, region_scope zonal, network_placement in_vpc, reachability private_ip, dan roles-nya datastore. Tolong tambahin ke knowledge graph.",
+      "assertions": [
+        "calls add_service_to_kg rather than answering from general knowledge",
+        "does not report the request as refused or failed",
+        "states that the entry is unverified and needs human confirmation before it appears in client material",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E11-curator-role-typo",
+      "prompt": "Tambahin juga service baru ini: Persistent Disk. Provider gcp, category storage, tier managed, region_scope zonal, network_placement in_vpc, reachability private_ip, roles-nya 'datstore'.",
+      "assertions": [
+        "calls add_service_to_kg with the role exactly as given ('datstore') rather than silently correcting the spelling itself",
+        "the call is refused with an unknown_role error, not written",
+        "the refusal names 'datastore' as the likely intended role rather than a generic rejection",
+        "does not add the service anyway or invent a workaround role",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E12-curator-role-warning",
+      "prompt": "Ada satu lagi: Cloud CDN dari GCP. Kategori networking, tier managed, region_scope global, network_placement edge, reachability public_or_private, roles-nya cdn aja.",
+      "assertions": [
+        "calls add_service_to_kg with roles including cdn",
+        "does not report the request as refused",
+        "surfaces a caveat that the cdn role alone will not match any rule, so the entry will answer UNCOVERED wherever it appears",
+        "does not add an extra role on its own to make the warning go away",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E13-explorer-typed-query-and-health",
+      "prompt": "Cek dong kesehatan knowledge graph-nya gimana sekarang. Terus tolong cariin juga, ada gak service Azure yang reachability-nya private_ip doang?",
+      "assertions": [
+        "calls check_kg_health and reports its coverage/regression result rather than a vague reassurance",
+        "calls search_services or query_services with provider=azure and reachability=private_ip rather than answering from general knowledge",
+        "reports whatever the filtered search actually returns, including an empty result, without relaxing the stated filter",
         "replies in Indonesian"
       ]
     }

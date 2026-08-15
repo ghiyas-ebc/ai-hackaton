@@ -2,14 +2,6 @@
   "eval_cases": [
     {
       "eval_case_id": "E01-serverless-db",
-      "prompt": {
-        "role": "user",
-        "parts": [
-          {
-            "text": "Tolong bikinin diagram arsitektur GCP buat proposal klien: ada web app, backend-nya pakai Cloud Run, terus connect ke Cloud SQL. Di depannya ada load balancer."
-          }
-        ]
-      },
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -17,7 +9,7 @@
               "rubric_id": "E01-serverless-db-A01",
               "content": {
                 "property": {
-                  "description": "runs scripts/validate.py rather than judging validity itself"
+                  "description": "cites specific rule-engine findings by id and severity (e.g. SEC-001, SEC-002) rather than a generic safety disclaimer"
                 }
               }
             },
@@ -25,7 +17,7 @@
               "rubric_id": "E01-serverless-db-A02",
               "content": {
                 "property": {
-                  "description": "inserts Serverless VPC Access on the Cloud Run -> Cloud SQL path instead of drawing a direct line"
+                  "description": "recommends Serverless VPC Access as the remediation for the Cloud Run -> Cloud SQL public-path finding"
                 }
               }
             },
@@ -55,18 +47,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E02-cross-cloud",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Yang di GCP: Cloud Run, Cloud SQL, Pub/Sub, sama Cloud Load Balancing."
+            "text": "Tolong bikinin diagram arsitektur GCP buat proposal klien: ada web app, backend-nya pakai Cloud Run, terus connect ke Cloud SQL. Di depannya ada load balancer."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E02-cross-cloud",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -74,7 +66,7 @@
               "rubric_id": "E02-cross-cloud-A01",
               "content": {
                 "property": {
-                  "description": "runs scripts/translate.py"
+                  "description": "resolves 'Pub/Sub' and 'Cloud Load Balancing' to their real knowledge-graph ids, or explicitly says they could not be resolved, rather than inventing plausible-looking ids"
                 }
               }
             },
@@ -82,7 +74,7 @@
               "rubric_id": "E02-cross-cloud-A02",
               "content": {
                 "property": {
-                  "description": "ASKS the user about Pub/Sub (Service Bus vs Event Grid) and Cloud Load Balancing (L4 / regional L7 / global L7) instead of choosing"
+                  "description": "surfaces the Pub/Sub target (Service Bus vs Event Grid) as an open decision rather than silently picking one"
                 }
               }
             },
@@ -90,7 +82,7 @@
               "rubric_id": "E02-cross-cloud-A03",
               "content": {
                 "property": {
-                  "description": "does not translate GCP connectors one by one"
+                  "description": "surfaces the Cloud Load Balancing tier (L4 / regional L7 / global L7) as an open decision rather than silently picking one"
                 }
               }
             },
@@ -98,7 +90,7 @@
               "rubric_id": "E02-cross-cloud-A04",
               "content": {
                 "property": {
-                  "description": "after the choices are given, shows VNet Integration emerging from the Azure rules"
+                  "description": "does not translate GCP connectors one-to-one -- explains that the target-side connector is decided by Azure's own rules rather than carried over directly"
                 }
               }
             },
@@ -106,24 +98,24 @@
               "rubric_id": "E02-cross-cloud-A05",
               "content": {
                 "property": {
-                  "description": "surfaces caveats for every PARTIAL equivalent"
+                  "description": "surfaces caveats for every PARTIAL equivalent it lists"
                 }
               }
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E02b-cross-cloud-choices",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Oke, buat Pub/Sub pakai Service Bus aja, dan Cloud Load Balancing-nya yang global L7. Tolong lanjutin translate arsitektur GCP tadi (Cloud Run, Cloud SQL, Pub/Sub, Cloud Load Balancing) ke Azure."
+            "text": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Alurnya: Cloud Load Balancing ke Cloud Run, Cloud Run ke Cloud SQL, dan Cloud Run ke Pub/Sub."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E02b-cross-cloud-choices",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -139,7 +131,7 @@
               "rubric_id": "E02b-cross-cloud-choices-A02",
               "content": {
                 "property": {
-                  "description": "honours the stated choices: Service Bus for Pub/Sub, global L7 for Cloud Load Balancing"
+                  "description": "honours the stated choice for Pub/Sub: Service Bus"
                 }
               }
             },
@@ -147,7 +139,7 @@
               "rubric_id": "E02b-cross-cloud-choices-A03",
               "content": {
                 "property": {
-                  "description": "shows VNet Integration emerging from the Azure rules rather than translated one-to-one from a GCP connector"
+                  "description": "honours the stated choice for Cloud Load Balancing: global L7"
                 }
               }
             },
@@ -155,12 +147,20 @@
               "rubric_id": "E02b-cross-cloud-choices-A04",
               "content": {
                 "property": {
-                  "description": "surfaces caveats for every PARTIAL equivalent"
+                  "description": "shows VNet Integration emerging from the Azure rules rather than translated one-to-one from a GCP connector"
                 }
               }
             },
             {
               "rubric_id": "E02b-cross-cloud-choices-A05",
+              "content": {
+                "property": {
+                  "description": "surfaces caveats for every PARTIAL equivalent"
+                }
+              }
+            },
+            {
+              "rubric_id": "E02b-cross-cloud-choices-A06",
               "content": {
                 "property": {
                   "description": "replies in Indonesian"
@@ -169,18 +169,52 @@
             }
           ]
         }
+      },
+      "agent_data": {
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "text": "Klien nanya kalau arsitektur ini dipindah ke Azure jadi apa. Alurnya: Cloud Load Balancing ke Cloud Run, Cloud Run ke Cloud SQL, dan Cloud Run ke Pub/Sub."
+                    }
+                  ]
+                }
+              },
+              {
+                "author": "agent",
+                "content": {
+                  "role": "model",
+                  "parts": [
+                    {
+                      "text": "Sebelum saya terjemahkan, ada dua keputusan yang perlu dikonfirmasi karena masing-masing punya lebih dari satu padanan di Azure: (1) Pub/Sub bisa jadi Azure Service Bus (kalau butuh urutan/pengiriman terjamin) atau Azure Event Grid (kalau cuma distribusi event ringan) -- yang mana? (2) Cloud Load Balancing-nya: Azure Front Door (L7 global), Azure Application Gateway (L7 regional), atau Azure Load Balancer (L4)? Begitu Anda konfirmasi, saya jalankan lagi terjemahannya dengan pilihan itu."
+                    }
+                  ]
+                }
+              },
+              {
+                "author": "user",
+                "content": {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "text": "Oke, buat Pub/Sub pakai Service Bus aja, dan Cloud Load Balancing-nya yang global L7. Tolong lanjutin translate arsitektur GCP tadi (Cloud Run, Cloud SQL, Pub/Sub, Cloud Load Balancing) ke Azure."
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "eval_case_id": "E03-unknown-service",
-      "prompt": {
-        "role": "user",
-        "parts": [
-          {
-            "text": "Bisa cek arsitektur ini? Cloud Run nyambung ke Cloud Composer terus ke BigQuery."
-          }
-        ]
-      },
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -210,18 +244,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E04-alternative-confusion",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Aku mau arsitektur yang pakai Cloud SQL dan Spanner dua-duanya, terus ada Cloud Run di depannya."
+            "text": "Bisa cek arsitektur ini? Cloud Run nyambung ke Cloud Composer terus ke BigQuery."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E04-alternative-confusion",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -251,18 +285,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E05-residency",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Buat arsitektur produksi untuk klien bank di Indonesia: API di Cloud Run, data di Firestore, analitik di BigQuery."
+            "text": "Aku mau arsitektur yang pakai Cloud SQL dan Spanner dua-duanya, terus ada Cloud Run di depannya."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E05-residency",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -292,18 +326,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E06-no-provider",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Bantu gambarin arsitektur buat aplikasi e-commerce sederhana dong."
+            "text": "Buat arsitektur produksi untuk klien bank di Indonesia: API di Cloud Run, data di Firestore, analitik di BigQuery."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E06-no-provider",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -325,18 +359,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E07-not-a-diagram-request",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Apa bedanya Event Grid sama Service Bus?"
+            "text": "Bantu gambarin arsitektur buat aplikasi e-commerce sederhana dong."
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E07-not-a-diagram-request",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -344,7 +378,7 @@
               "rubric_id": "E07-not-a-diagram-request-A01",
               "content": {
                 "property": {
-                  "description": "answers directly from references/azure.md"
+                  "description": "explains the difference between Event Grid and Service Bus in terms of use case (event distribution vs. reliable message queuing/ordering), consistent with their knowledge-graph roles"
                 }
               }
             },
@@ -352,24 +386,24 @@
               "rubric_id": "E07-not-a-diagram-request-A02",
               "content": {
                 "property": {
-                  "description": "does not force a diagram or run the validator unnecessarily"
+                  "description": "does not include an architecture diagram or a validation findings table in the reply"
                 }
               }
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E08-verdict-card-honesty",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Klien mau pakai Cloud Run yang connect ke Cloud Armor, tapi belum tau environment-nya production apa poc. Menurutmu ini gampang gak?"
+            "text": "Apa bedanya Event Grid sama Service Bus?"
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E08-verdict-card-honesty",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -423,18 +457,18 @@
             }
           ]
         }
-      }
-    },
-    {
-      "eval_case_id": "E09-verdict-card-mismatch-and-gap",
+      },
       "prompt": {
         "role": "user",
         "parts": [
           {
-            "text": "Klien bilang butuh WebSockets buat komunikasi real-time antara Cloud Load Balancing dan Cloud Run. Selain itu gimana kesiapan tekniknya secara umum?"
+            "text": "Klien mau pakai Cloud Run yang connect ke Cloud Armor, tapi belum tau environment-nya production apa poc. Menurutmu ini gampang gak?"
           }
         ]
-      },
+      }
+    },
+    {
+      "eval_case_id": "E09-verdict-card-mismatch-and-gap",
       "rubric_groups": {
         "source_assertions": {
           "rubrics": [
@@ -480,6 +514,226 @@
             }
           ]
         }
+      },
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Klien bilang butuh WebSockets buat komunikasi real-time antara Cloud Load Balancing dan Cloud Run. Selain itu gimana kesiapan tekniknya secara umum?"
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "E10-curator-add-happy-path",
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E10-curator-add-happy-path-A01",
+              "content": {
+                "property": {
+                  "description": "calls add_service_to_kg rather than answering from general knowledge"
+                }
+              }
+            },
+            {
+              "rubric_id": "E10-curator-add-happy-path-A02",
+              "content": {
+                "property": {
+                  "description": "does not report the request as refused or failed"
+                }
+              }
+            },
+            {
+              "rubric_id": "E10-curator-add-happy-path-A03",
+              "content": {
+                "property": {
+                  "description": "states that the entry is unverified and needs human confirmation before it appears in client material"
+                }
+              }
+            },
+            {
+              "rubric_id": "E10-curator-add-happy-path-A04",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Ada service GCP baru yang belum ada di knowledge graph kita: Cloud Filestore. Menurut engineer, kategorinya storage, tier managed, region_scope zonal, network_placement in_vpc, reachability private_ip, dan roles-nya datastore. Tolong tambahin ke knowledge graph."
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "E11-curator-role-typo",
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E11-curator-role-typo-A01",
+              "content": {
+                "property": {
+                  "description": "calls add_service_to_kg with the role exactly as given ('datstore') rather than silently correcting the spelling itself"
+                }
+              }
+            },
+            {
+              "rubric_id": "E11-curator-role-typo-A02",
+              "content": {
+                "property": {
+                  "description": "the call is refused with an unknown_role error, not written"
+                }
+              }
+            },
+            {
+              "rubric_id": "E11-curator-role-typo-A03",
+              "content": {
+                "property": {
+                  "description": "the refusal names 'datastore' as the likely intended role rather than a generic rejection"
+                }
+              }
+            },
+            {
+              "rubric_id": "E11-curator-role-typo-A04",
+              "content": {
+                "property": {
+                  "description": "does not add the service anyway or invent a workaround role"
+                }
+              }
+            },
+            {
+              "rubric_id": "E11-curator-role-typo-A05",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Tambahin juga service baru ini: Persistent Disk. Provider gcp, category storage, tier managed, region_scope zonal, network_placement in_vpc, reachability private_ip, roles-nya 'datstore'."
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "E12-curator-role-warning",
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E12-curator-role-warning-A01",
+              "content": {
+                "property": {
+                  "description": "calls add_service_to_kg with roles including cdn"
+                }
+              }
+            },
+            {
+              "rubric_id": "E12-curator-role-warning-A02",
+              "content": {
+                "property": {
+                  "description": "does not report the request as refused"
+                }
+              }
+            },
+            {
+              "rubric_id": "E12-curator-role-warning-A03",
+              "content": {
+                "property": {
+                  "description": "surfaces a caveat that the cdn role alone will not match any rule, so the entry will answer UNCOVERED wherever it appears"
+                }
+              }
+            },
+            {
+              "rubric_id": "E12-curator-role-warning-A04",
+              "content": {
+                "property": {
+                  "description": "does not add an extra role on its own to make the warning go away"
+                }
+              }
+            },
+            {
+              "rubric_id": "E12-curator-role-warning-A05",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Ada satu lagi: Cloud CDN dari GCP. Kategori networking, tier managed, region_scope global, network_placement edge, reachability public_or_private, roles-nya cdn aja."
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "E13-explorer-typed-query-and-health",
+      "rubric_groups": {
+        "source_assertions": {
+          "rubrics": [
+            {
+              "rubric_id": "E13-explorer-typed-query-and-health-A01",
+              "content": {
+                "property": {
+                  "description": "calls check_kg_health and reports its coverage/regression result rather than a vague reassurance"
+                }
+              }
+            },
+            {
+              "rubric_id": "E13-explorer-typed-query-and-health-A02",
+              "content": {
+                "property": {
+                  "description": "calls search_services or query_services with provider=azure and reachability=private_ip rather than answering from general knowledge"
+                }
+              }
+            },
+            {
+              "rubric_id": "E13-explorer-typed-query-and-health-A03",
+              "content": {
+                "property": {
+                  "description": "reports whatever the filtered search actually returns, including an empty result, without relaxing the stated filter"
+                }
+              }
+            },
+            {
+              "rubric_id": "E13-explorer-typed-query-and-health-A04",
+              "content": {
+                "property": {
+                  "description": "replies in Indonesian"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Cek dong kesehatan knowledge graph-nya gimana sekarang. Terus tolong cariin juga, ada gak service Azure yang reachability-nya private_ip doang?"
+          }
+        ]
       }
     }
   ]

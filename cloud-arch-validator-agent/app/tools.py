@@ -79,7 +79,10 @@ def validate_architecture(edges: str, environment: str = "poc",
             service ids or known aliases. Example: 'cloud-run>cloud-sql,cloud-sql>gcs'.
         environment: Deployment environment — 'poc', 'staging', or 'production'.
             Some rules only fire in production.
-        data_residency: Residency requirement, e.g. 'none', 'indonesia', 'eu'.
+        data_residency: Residency requirement — 'id', 'eu', 'us', or 'none'.
+            Use the code the rule engine matches on, not the country name:
+            'indonesia' silently fails to match GOV-001-DATA-RESIDENCY's
+            'id' gate, dropping a compliance finding without any error.
         sla_tier: Reliability expectation — 'standard' or 'high'.
 
     Returns:
@@ -125,7 +128,9 @@ def generate_verdict_card(edges: str, environment: str = "", data_residency: str
     Args:
         edges: Connections as 'source>target' pairs, comma-separated.
         environment: 'poc', 'staging', or 'production'. Leave empty if unknown.
-        data_residency: e.g. 'none', 'indonesia', 'eu'. Leave empty if unknown.
+        data_residency: 'id', 'eu', 'us', or 'none' — the rule engine's code,
+            not the country name ('indonesia' will not match the 'id' gate on
+            GOV-001-DATA-RESIDENCY). Leave empty if unknown.
         sla_tier: 'standard' or 'high'. Leave empty if unknown.
         stated_needs: Comma-separated plain-language statement of what the
             client said they need (e.g. 'real-time updates,websockets'), used
@@ -181,7 +186,7 @@ def _persist_gaps(records):
 
 
 def translate_architecture(edges: str, target_provider: str,
-                           environment: str = "poc") -> dict:
+                           environment: str = "poc", choices: str = "") -> dict:
     """Translate an architecture from one cloud provider to another.
 
     Maps each service to its equivalent on the target provider using
@@ -190,18 +195,38 @@ def translate_architecture(edges: str, target_provider: str,
     with a guess; connectors are dropped and regenerated at the target by
     design, so their absence is not a gap.
 
+    When a source service has more than one equivalent, translation stops
+    without picking one: the response carries 'status': 'AWAITING_DECISION'
+    and 'needs_decision' (each entry has 'source_service_id', a 'question',
+    and 'options' with target ids/names). Put that question to the user
+    verbatim — do not choose on their behalf, that is the most common way to
+    produce an architecture that looks convincing and is wrong. Once they
+    answer, call this again with the same edges and `choices` set to their
+    decision; leave it empty on the first call.
+
     Args:
         edges: Connections as 'source>target' pairs, comma-separated.
         target_provider: 'gcp' or 'azure'.
         environment: 'poc', 'staging', or 'production'.
+        choices: Resolved decisions for services with several equivalents, as
+            'source_id=target_id' pairs, comma-separated — the ids from a
+            prior call's 'needs_decision', not the user's own words. Example:
+            'cloud-load-balancing=azure-front-door,pubsub=azure-service-bus'.
+            Leave empty when nothing is pending yet.
 
     Returns:
         A dict with the service mapping, any dropped/unmapped/pending-choice
         services, and a validation report for the translated architecture.
     """
+    parsed_choices = {}
+    for part in choices.split(","):
+        if "=" in part:
+            source_id, target_id = part.split("=", 1)
+            parsed_choices[source_id.strip()] = target_id.strip()
     return translate_module.translate(
         _parse_edges(edges),
         target_provider,
+        choices=parsed_choices,
         context={"environment": environment},
         kg=_KG,
     )

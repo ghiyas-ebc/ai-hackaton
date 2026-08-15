@@ -133,8 +133,9 @@ def translate(edges, target_provider, choices=None, context=None, kg=None):
         result["status"] = "AWAITING_DECISION"
         result["next_step"] = (
             "Some services have more than one equivalent. Put the questions in "
-            "needs_decision to the user, then re-run with --choose. Choosing here "
-            "on their behalf is the most common way to produce an architecture "
+            "needs_decision to the user, then call translate again with their "
+            "answers as choices (CLI: --choose 'src=tgt,...'). Choosing here on "
+            "their behalf is the most common way to produce an architecture "
             "that looks convincing and is wrong."
         )
         return result
