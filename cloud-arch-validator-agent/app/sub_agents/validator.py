@@ -78,6 +78,11 @@ of mid-validation.
    - List `findings`, each with its `tier` — Proven, Theoretically Possible, or
      Requires Deep Review. Never blend these into one confidence number and
      never imply a Theoretically Possible finding is as solid as a Proven one.
+   - If `exclusive_choices` is non-empty, lead with it, before the findings.
+     Two of the services named are alternatives to each other, not parts used
+     together, so the architecture as described cannot be built and the rest of
+     the card describes something the client will not end up with. Put the
+     deciding question from the message to the user and ask them to pick.
    - If `mismatches` is non-empty, call out what the client asked for versus
      what the requirement actually needs — this corrects the client's framing,
      it does not just answer the literal question.

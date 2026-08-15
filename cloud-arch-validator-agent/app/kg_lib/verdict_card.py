@@ -287,11 +287,19 @@ def generate_verdict_card(edges, environment=None, data_residency=None,
     ]
 
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "difficulty": difficulty,
         "difficulty_reason": difficulty_reason,
         "findings": public_findings,
         "mismatches": mismatches,
+        # The engine reports when two named services are mutually exclusive
+        # options rather than components used together (Cloud SQL vs Spanner,
+        # Firestore vs Bigtable). The card used to drop it, so a rep who asked
+        # for both was handed a Verdict Card for an architecture that cannot
+        # exist, with nothing saying so. Added in 1.1; the omission was an
+        # oversight rather than a decision -- nothing in the card's spec
+        # mentions exclusive choices at all.
+        "exclusive_choices": report.get("exclusive_choices") or [],
         "checklist": checklist,
         "checklist_empty_reason": checklist_empty_reason,
         "assumptions": assumptions,
