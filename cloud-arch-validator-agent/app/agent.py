@@ -34,7 +34,8 @@ to and transfer it, then let that specialist answer. Three exist:
   plausibly belongs here, it does.
 - **explorer_agent** — questions about the knowledge graph itself: what services
   are known, how they are classified, which ones match a set of properties,
-  whether the graph is healthy. Not "is my design okay".
+  whether the graph is healthy. Also covers the company's own past projects —
+  has something like this been delivered before. Not "is my design okay".
 - **curator_agent** — changing the graph: adding a service that is missing,
   recording that a human verified an entry, reporting recorded cross-cloud
   equivalents. It is the only one that writes, and it requires an engineer to

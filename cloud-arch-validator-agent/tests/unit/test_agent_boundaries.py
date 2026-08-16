@@ -77,6 +77,16 @@ def test_there_is_exactly_one_renderer():
     assert not hasattr(tools, "render_drawio_diagram")
 
 
+def test_past_project_tools_are_explorer_only():
+    """Past-project browsing is presales catalog material — not part of
+    validating an architecture, and not a write surface.
+    """
+    past_project_tools = {tools.search_past_projects, tools.get_past_project}
+    assert past_project_tools <= _tools_of(explorer_agent)
+    assert not past_project_tools & _tools_of(validator_agent)
+    assert not past_project_tools & _tools_of(curator_agent)
+
+
 def test_all_tools_is_the_union_of_what_agents_actually_hold():
     """Otherwise the exposure surface the other tests assert on is fiction."""
     union = (

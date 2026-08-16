@@ -20,17 +20,20 @@ staying invocable.
 | `app/sub_agents/` | `validator`, `explorer`, `curator`. One job each. |
 | `app/tools.py` | Tool implementations and the per-agent groupings. |
 | `app/kg_lib/` | The rule engine, plus `kg_pg.py` / `kg_write.py` / `pgconn.py`. |
+| `app/project_lib/` | Reads and diagram-building over `project_catalog` — the past-projects schema. Separate from `kg_lib` on purpose; see the schema's own header comment in `db/migrations/0007_project_catalog.sql`. |
 | `db/migrations/` | Numbered schema migrations, applied in order. |
 | `db/migrate.py` | Applies pending ones; refuses edits to applied files. |
-| `db/seed_from_yaml.py` | Rebuild a database from the export. |
+| `db/seed_from_yaml.py` | Rebuild the `kg` schema from the export. |
+| `db/seed_past_projects.py` | Load the hand-authored past-projects catalog. Not a migration off a retiring file the way `seed_from_yaml.py` is — `app/references/projects/past_projects.yaml` stays the source of truth. |
 | `db/export_to_yaml.py` | Postgres → YAML. The only thing that writes it. |
 
 ### Getting a database
 
 ```bash
 docker compose up -d db
-uv run python db/migrate.py          # schema
-uv run python db/seed_from_yaml.py   # data
+uv run python db/migrate.py             # schema
+uv run python db/seed_from_yaml.py      # kg data
+uv run python db/seed_past_projects.py  # past-projects data
 ```
 
 Changing the schema means adding `db/migrations/NNNN_name.sql`, never editing an

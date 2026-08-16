@@ -206,3 +206,30 @@ def test_two_services_sharing_a_display_name_do_not_merge_into_one_box():
 def test_renderer_rejects_invalid_width():
     with pytest.raises(ValueError, match="width"):
         renderer.render_report({}, tools._KG, width=10)
+
+
+def test_render_flowchart_matches_render_report_chart_body():
+    """Two entry points, one retroflow call — not two implementations that
+    happen to agree today. `render_flowchart` exists for callers (a past
+    project's stored topology) that have edges and labels but no rule-engine
+    `report`.
+    """
+    edges = "cloud-load-balancing>cloud-run,cloud-run>cloud-sql"
+    connectivity = [
+        {"source": "cloud-load-balancing", "target": "cloud-run"},
+        {"source": "cloud-run", "target": "cloud-sql"},
+    ]
+    labels = renderer._labels(
+        renderer._node_ids({"connectivity": connectivity}), tools._KG.services
+    )
+
+    via_report = tools.render_ascii_diagram(edges, width=100)["diagram"]
+    chart_from_report = (
+        via_report.split("ARCHITECTURE\n\n", 1)[1]
+        .split("\nSERVICES\n")[0]
+        .rstrip("\n")
+    )
+
+    chart_from_flowchart = renderer.render_flowchart(connectivity, labels)
+
+    assert chart_from_flowchart == chart_from_report

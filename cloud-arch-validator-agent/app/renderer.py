@@ -153,6 +153,19 @@ def _flowchart(report: Mapping[str, object], labels: Mapping[str, str],
     return [line.rstrip() for line in chart.splitlines()]
 
 
+def render_flowchart(connectivity: list[dict], labels: Mapping[str, str], *,
+                     ascii_only: bool = False) -> str:
+    """Draw an arbitrary source/target edge list as a flowchart.
+
+    A second entry point into the one retroflow call in `_flowchart`, for a
+    caller that has service ids and edges but no rule-engine `report` — a
+    past project's recorded topology, for instance. `render_report` and this
+    both terminate in `_flowchart`, so there remains exactly one
+    `FlowchartGenerator` construction in the codebase.
+    """
+    return "\n".join(_flowchart({"connectivity": connectivity}, labels, ascii_only))
+
+
 def _detail_text(detail: object, ascii_only: bool) -> str:
     """Flatten a finding's detail.
 

@@ -168,6 +168,48 @@ def test_search_filters_are_exact_match() -> None:
     assert tools.search_services(category="not-a-category")["count"] == 0
 
 
+def test_search_past_projects_with_no_match_is_a_real_empty_answer() -> None:
+    result = tools.search_past_projects(q="no such project will ever match this")
+    assert result == {
+        "count": 0,
+        "projects": [],
+        "filters": {"q": "no such project will ever match this", "tag": "",
+                    "provider": "", "service_id": ""},
+    }
+
+
+def test_search_past_projects_filters_narrow_independently() -> None:
+    by_tag = tools.search_past_projects(tag="fintech")
+    assert by_tag["count"] == 1
+    assert by_tag["projects"][0]["id"] == "fintechco-azure-data-platform"
+
+    by_provider = tools.search_past_projects(provider="gcp")
+    assert by_provider["count"] >= 1
+    assert all("gcp" in p["providers"] for p in by_provider["projects"])
+
+    by_service = tools.search_past_projects(service_id="cloud-sql")
+    assert by_service["count"] >= 1
+    assert any(p["id"] == "retailco-cloud-platform-migration"
+               for p in by_service["projects"])
+
+
+def test_get_past_project_reports_a_missing_id_not_an_error() -> None:
+    result = tools.get_past_project("does-not-exist")
+    assert result == {"found": False, "project_id": "does-not-exist"}
+
+
+def test_get_past_project_with_connections_draws_a_chart() -> None:
+    result = tools.get_past_project("retailco-cloud-platform-migration")
+    assert result["found"] is True
+    assert "│" in result["diagram"] and "▼" in result["diagram"]
+
+
+def test_get_past_project_with_no_connections_reports_nothing_to_draw() -> None:
+    result = tools.get_past_project("fintechco-azure-data-platform")
+    assert result["found"] is True
+    assert result["diagram"] == "[NO_CONNECTIONS] Nothing to draw."
+
+
 def test_translate_to_azure_maps_services() -> None:
     result = tools.translate_architecture("cloud-run>cloud-sql", "azure")
     assert result["target_provider"] == "azure"

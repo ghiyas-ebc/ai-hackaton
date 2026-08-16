@@ -34,6 +34,8 @@ import translate as translate_module
 import validate as validate_module
 import verdict_card as verdict_card_module
 
+from app.project_lib import projects_pg
+from app.project_lib import render as project_render
 from app.renderer import render_report
 
 # Loaded once per process. The graph is small and read on nearly every tool
@@ -712,6 +714,100 @@ def list_roles(kind: str = "") -> dict:
     return {"count": len(out), "roles": out, "filters": {"kind": kind}}
 
 
+def _service_label(service_id: str) -> str:
+    return _KG.services.get(service_id, {}).get("name", service_id)
+
+
+def search_past_projects(
+    q: str = "",
+    tag: str = "",
+    provider: str = "",
+    service_id: str = "",
+) -> dict:
+    """Find delivered projects in the company's own project history.
+
+    This is a separate catalog from the knowledge graph — past projects the
+    company actually delivered, not general facts about cloud services. `q`
+    is a substring match, not semantic search; leave any filter empty to
+    skip it.
+
+    Args:
+        q: Case-insensitive substring match against name, description, and
+            use_case. Empty matches everything.
+        tag: Exact match against an authored tag, e.g. 'fintech'. Tags are
+            free text chosen when a project was catalogued, not a closed
+            vocabulary — there is no list of tags to check against.
+        provider: 'gcp' or 'azure'. Matches a project that used at least one
+            service from that provider.
+        service_id: A specific knowledge-graph service id the project must
+            have used, e.g. 'cloud-run'. Call `lookup_service` first if
+            unsure of the id.
+
+    Returns:
+        {'count': N, 'projects': [{id, name, description, use_case,
+        started_at, ended_at, providers, tags, service_count, member_count},
+        ...]}, most recent first. An empty result is a real answer: no
+        delivered project matches, not a reason to relax a filter and report
+        something adjacent.
+    """
+    with pgconn.connect() as conn:
+        projects = projects_pg.list_projects(
+            conn, q=q, tag=tag, provider=provider, service_id=service_id
+        )
+    for p in projects:
+        p["started_at"] = str(p["started_at"])
+        p["ended_at"] = str(p["ended_at"]) if p["ended_at"] else None
+    return {
+        "count": len(projects),
+        "projects": projects,
+        "filters": {"q": q, "tag": tag, "provider": provider, "service_id": service_id},
+    }
+
+
+def get_past_project(project_id: str, ascii_only: bool = False) -> dict:
+    """Full detail for one past project, including a rendered diagram.
+
+    The diagram draws the services this specific project actually used and
+    the connections between them, as catalogued — not a knowledge-graph
+    connectivity check, and not a general validity opinion. A project
+    catalogued with services but no recorded connections still returns a
+    diagram; it just says there is nothing to draw.
+
+    Args:
+        project_id: The catalog id, e.g. as returned by
+            `search_past_projects`.
+        ascii_only: Transliterate the diagram to 7-bit ASCII, for terminals
+            that mangle box-drawing glyphs. Matches `render_ascii_diagram`.
+
+    Returns:
+        {'found': True, 'project': {id, name, description, use_case,
+        started_at, ended_at, client_name, members, services, connections},
+        'diagram': '<chart text>'} on success.
+
+        {'found': False, 'project_id': project_id} when the catalog has no
+        project with that id — a real answer, the same standing as
+        UNKNOWN_SERVICE.
+    """
+    with pgconn.connect() as conn:
+        project = projects_pg.get_project(conn, project_id)
+    if project is None:
+        return {"found": False, "project_id": project_id}
+
+    project["started_at"] = str(project["started_at"])
+    project["ended_at"] = str(project["ended_at"]) if project["ended_at"] else None
+
+    labels = {
+        sid: _service_label(sid)
+        for sid in {s["service_id"] for s in project["services"]}
+        | {c["source_service_id"] for c in project["connections"]}
+        | {c["target_service_id"] for c in project["connections"]}
+    }
+    diagram = project_render.build_diagram(
+        project["connections"], labels, ascii_only=ascii_only
+    )
+    return {"found": True, "project": project, "diagram": diagram}
+
+
 # --------------------------------------------------------------- grouping ----
 # One list per sub-agent. Which tools a sub-agent holds is the boundary that
 # actually enforces the split — an agent cannot be talked into calling a tool it
@@ -736,6 +832,8 @@ EXPLORER_TOOLS = [
     list_roles,
     export_kg_graph,
     check_kg_health,
+    search_past_projects,
+    get_past_project,
 ]
 
 CURATOR_TOOLS = [

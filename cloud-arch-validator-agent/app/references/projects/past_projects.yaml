@@ -1,0 +1,66 @@
+# The company's own delivered-project history. Hand-authored, unlike
+# app/references/kg/*.yaml — this is never generated. See D27 in the parent
+# repo's CLAUDE.md for why the kg/ set is generated and this deliberately
+# is not: this data was never YAML-authored under the old pre-Postgres
+# system, has no CAV_KG_BACKEND=local offline consumer, and isn't checked
+# by verdict_grounding's rule-id list. It goes the other direction instead —
+# authored here, loaded once by db/seed_past_projects.py.
+#
+# List order becomes each project's authored display order (its members,
+# services, and connections lists too — position becomes `ord`).
+#
+# `services` must be ids that exist in the knowledge graph
+# (app/references/kg/services.yaml) — project_service/project_connection
+# carry a foreign key onto kg.service, so seeding refuses an id the graph
+# doesn't recognise rather than silently drawing a box for a service that
+# was never validated.
+#
+# `client_name` is nullable and a judgment call per entry: use an
+# anonymised descriptor ("Regional Retail Chain, NDA") rather than a real
+# name where confidentiality requires it. The schema does not enforce
+# either way.
+
+- id: retailco-cloud-platform-migration
+  name: "RetailCo — Cloud Platform Migration"
+  description: >
+    Migrated an on-prem retail e-commerce platform to GCP. Public traffic
+    terminates at a load balancer in front of Cloud Run, which reads and
+    writes to a private-IP Cloud SQL instance through a serverless VPC
+    connector.
+  use_case: "Retail e-commerce replatforming"
+  started_at: 2023-01-15
+  ended_at: 2023-09-30
+  client_name: "Regional Retail Chain (NDA)"
+  tags: [retail, ecommerce, gcp, replatform]
+  members:
+    - {name: "Jane Doe", role_on_project: "Lead Architect"}
+    - {name: "John Smith", role_on_project: "Delivery PM"}
+  services:
+    - cloud-load-balancing
+    - cloud-run
+    - serverless-vpc-access
+    - cloud-sql
+  connections:
+    - {source: cloud-load-balancing, target: cloud-run, note: "HTTPS ingress"}
+    - {source: cloud-run, target: serverless-vpc-access, note: "private egress into the VPC"}
+    - {source: serverless-vpc-access, target: cloud-sql, note: "private IP, no public endpoint"}
+
+- id: fintechco-azure-data-platform
+  name: "FintechCo — Azure Data Platform Assessment"
+  description: >
+    A scoping engagement cataloguing candidate services for a future Azure
+    data platform (Cosmos DB, Synapse, Event Grid). Ended at the proposal
+    stage — no architecture was built or connected, so there is nothing to
+    diagram yet.
+  use_case: "Data platform feasibility assessment"
+  started_at: 2024-03-01
+  ended_at: 2024-04-12
+  client_name: "Mid-size Fintech (NDA)"
+  tags: [fintech, azure, assessment]
+  members:
+    - {name: "Priya Nair", role_on_project: "Solutions Architect"}
+  services:
+    - azure-cosmos-db
+    - azure-synapse
+    - azure-event-grid
+  connections: []
