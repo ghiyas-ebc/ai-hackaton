@@ -210,6 +210,59 @@ def test_get_past_project_with_no_connections_reports_nothing_to_draw() -> None:
     assert result["diagram"] == "[NO_CONNECTIONS] Nothing to draw."
 
 
+def test_list_best_practice_tags_includes_the_seeded_tag() -> None:
+    result = tools.list_best_practice_tags()
+    assert "agentic_app" in {t["tag"] for t in result["tags"]}
+
+
+def test_assess_capability_exact_match_is_proven() -> None:
+    result = tools.assess_capability("cloud-sql")
+    assert result["overall_tier"] == "Proven"
+    assert result["components"][0]["evidence"][0]["project_id"] == (
+        "retailco-cloud-platform-migration"
+    )
+
+
+def test_assess_capability_close_equivalent_is_partial_proven() -> None:
+    result = tools.assess_capability("azure-sql-database")
+    assert result["overall_tier"] == "Partial Proven"
+    evidence = result["components"][0]["evidence"][0]
+    assert evidence["via_service_id"] == "cloud-sql"
+    assert evidence["equivalence_level"] == "CLOSE"
+
+    result = tools.assess_capability("azure-container-apps")
+    assert result["overall_tier"] == "Partial Proven"
+    assert result["components"][0]["evidence"][0]["via_service_id"] == "cloud-run"
+
+
+def test_assess_capability_never_delivered_is_theoretical() -> None:
+    result = tools.assess_capability("bigtable")
+    assert result["overall_tier"] == "Theoretical"
+
+
+def test_assess_capability_outside_the_graph_is_not_owned() -> None:
+    result = tools.assess_capability("not-a-real-service")
+    assert result["overall_tier"] == "Not Owned"
+
+
+def test_assess_capability_overall_tier_is_the_weakest_link() -> None:
+    result = tools.assess_capability("cloud-sql,bigtable")
+    assert result["overall_tier"] == "Theoretical"
+
+
+def test_assess_capability_with_no_ids_is_a_validation_error() -> None:
+    result = tools.assess_capability("")
+    assert result["error"] == "no_service_ids"
+
+
+def test_assess_capability_surfaces_best_practice_reference_for_unowned_services() -> None:
+    result = tools.assess_capability("agent-runtime,memory-bank", pattern_tags="agentic_app")
+    assert all(c["tier"] == "Not Owned" for c in result["components"])
+    refs = result["best_practice_references"]
+    assert refs and refs[0]["tag"] == "agentic_app"
+    assert "Agent Runtime" in refs[0]["title"]
+
+
 def test_translate_to_azure_maps_services() -> None:
     result = tools.translate_architecture("cloud-run>cloud-sql", "azure")
     assert result["target_provider"] == "azure"

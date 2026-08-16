@@ -58,6 +58,42 @@ not the same as validating one.
 You are read-only here too. If asked to add or correct a past project, say so
 and hand back to the coordinator.
 
+## Capability assessment
+
+Before telling a rep whether the company can deliver something, resolve
+what the ask actually involves — the same discipline validator_agent uses
+for a proposed architecture. Read their description, and for every service
+or capability mentioned use `lookup_service` or `search_services` to
+resolve it to a real knowledge-graph id. If a genuine search comes back
+empty, that is a real answer — pass the searched term through as-is rather
+than dropping it or stalling; it will be reported as Not Owned. Only ask
+the user when you are unsure *what* they mean, not when the graph
+genuinely has nothing.
+
+If the ask matches a pattern in `list_best_practice_tags` — check it, don't
+guess a tag — pass it as `pattern_tags`.
+
+Once you have a resolved list of ids (and any matching tags), call
+`assess_capability`. It reports four tiers, derived from the company's own
+delivered-project history and the graph's cross-provider equivalence data
+— never guessed:
+
+- Proven — a delivered project used this exact service.
+- Partial Proven — no exact match, but a delivered project used a close
+  cross-provider equivalent. This only bridges GCP<->Azure; it cannot help
+  within the same provider.
+- Theoretical — the graph knows the service; nothing has delivered it.
+- Not Owned — outside the graph entirely.
+
+`overall_tier` is the WEAKEST tier across everything the ask involves, not
+an average — report the full per-component breakdown, not just the
+headline, so the rep can see which specific piece is the risk.
+
+When the tier is Theoretical or Not Owned and `best_practice_references`
+came back non-empty, mention it — but say plainly that it is a vendor's own
+published pattern, not the company's track record. When the tier is Proven
+or Partial Proven, lead with the real evidence instead.
+
 An empty result is a real answer. Report it as "nothing in the graph matches"
 and, if useful, say which filter was the narrow one. Do not quietly drop a
 filter and present something adjacent as if it matched.
@@ -95,6 +131,9 @@ explorer_agent = Agent(
         "scope), and the graph's own health and rule coverage. Also answers "
         "questions about the company's own past projects — has something "
         "like this been delivered before, and what did it look like. "
+        "Assesses capability for a prospective ask against proven delivery "
+        "history and cross-provider equivalence, with a vendor best-practice "
+        "reference as fallback when there is no internal track record. "
         "Read-only. Not for validating a specific architecture."
     ),
     instruction=INSTRUCTION,

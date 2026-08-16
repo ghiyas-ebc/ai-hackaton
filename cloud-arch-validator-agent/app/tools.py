@@ -34,6 +34,7 @@ import translate as translate_module
 import validate as validate_module
 import verdict_card as verdict_card_module
 
+from app.project_lib import capability as capability_module
 from app.project_lib import projects_pg
 from app.project_lib import render as project_render
 from app.renderer import render_report
@@ -808,6 +809,67 @@ def get_past_project(project_id: str, ascii_only: bool = False) -> dict:
     return {"found": True, "project": project, "diagram": diagram}
 
 
+def list_best_practice_tags() -> dict:
+    """The closed vocabulary of best-practice-reference tags.
+
+    Check this before passing `pattern_tags` to `assess_capability` — the set
+    is small and hand-curated, and a tag outside it is refused rather than
+    silently matching nothing.
+
+    Returns:
+        {'count': N, 'tags': [{'tag', 'note'}, ...]}
+    """
+    with pgconn.connect() as conn:
+        tags = projects_pg.list_best_practice_tags(conn)
+    return {"count": len(tags), "tags": tags}
+
+
+def assess_capability(service_ids: str, pattern_tags: str = "") -> dict:
+    """Assess proven company experience for the services a prospective ask involves.
+
+    Derived from the company's own delivered-project history
+    (`project_catalog`) and the knowledge graph's cross-provider equivalence
+    data — never guessed, and never an LLM opinion on whether the company
+    "could probably" do something.
+
+    Args:
+        service_ids: Comma-separated ids the ask involves, e.g.
+            'cloud-run,cloud-sql'. Resolve each one with `lookup_service` or
+            `search_services` first. If a genuine search comes back with
+            nothing — a real graph miss, not something you're unsure how to
+            search for — pass the searched term through as-is rather than
+            dropping it; it will be reported as Not Owned, which is a real
+            answer, not a failure.
+        pattern_tags: Comma-separated tags from `list_best_practice_tags`,
+            e.g. 'agentic_app'. Optional. Only pass a tag that's actually in
+            that list — never invent one.
+
+    Returns:
+        {'overall_tier': 'Proven'|'Partial Proven'|'Theoretical'|'Not Owned',
+        'components': [{'service_id', 'tier', 'evidence': [...]}, ...],
+        'best_practice_references': [{'id', 'tag', 'provider', 'title',
+        'note', 'reference_url'}, ...]}.
+
+        `overall_tier` is the WEAKEST tier across every component, not an
+        average. `evidence` lists which delivered project(s) back a Proven or
+        Partial Proven tier; for Partial Proven each entry also names which
+        service it was proven through (`via_service_id`/`equivalence_level`).
+        `best_practice_references` is populated whenever `pattern_tags` was
+        given, independent of tier — most useful to mention when the tier is
+        Theoretical or Not Owned; when it's Proven or Partial Proven, lead
+        with that real evidence instead.
+
+        {'error': 'no_service_ids', ...} if the input was empty after
+        parsing — a real validation failure, not an empty-catalog answer.
+    """
+    ids = [s.strip() for s in service_ids.split(",") if s.strip()]
+    if not ids:
+        return {"error": "no_service_ids", "overall_tier": None, "components": []}
+    tags = [t.strip() for t in pattern_tags.split(",") if t.strip()]
+    with pgconn.connect() as conn:
+        return capability_module.assess(_KG, conn, ids, tags)
+
+
 # --------------------------------------------------------------- grouping ----
 # One list per sub-agent. Which tools a sub-agent holds is the boundary that
 # actually enforces the split — an agent cannot be talked into calling a tool it
@@ -834,6 +896,8 @@ EXPLORER_TOOLS = [
     check_kg_health,
     search_past_projects,
     get_past_project,
+    list_best_practice_tags,
+    assess_capability,
 ]
 
 CURATOR_TOOLS = [

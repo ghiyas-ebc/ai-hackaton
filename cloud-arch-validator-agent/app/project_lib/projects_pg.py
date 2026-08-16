@@ -78,3 +78,59 @@ def get_project(conn, project_id: str) -> dict | None:
         cur.execute(_CONNECTIONS_SQL, {"id": project_id})
         project["connections"] = cur.fetchall()
     return project
+
+
+_USAGE_SQL = """
+    SELECT ps.service_id, p.id AS project_id, p.name
+    FROM project_service ps JOIN project p ON p.id = ps.project_id
+    WHERE ps.service_id = ANY(%(ids)s)
+    ORDER BY p.started_at DESC, p.id
+"""
+
+
+def projects_using(conn, service_ids: list[str]) -> dict[str, list[dict]]:
+    """service_id -> [{project_id, name}, ...] for delivered projects using
+    it. An id with no match is simply absent — a real answer, not queried
+    further. Feeds the capability-assessment feature's Proven/Partial
+    Proven tiers (`app/project_lib/capability.py`)."""
+    if not service_ids:
+        return {}
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute("SET search_path TO project_catalog, public")
+        cur.execute(_USAGE_SQL, {"ids": service_ids})
+        rows = cur.fetchall()
+    usage: dict[str, list[dict]] = {}
+    for row in rows:
+        usage.setdefault(row["service_id"], []).append(
+            {"project_id": row["project_id"], "name": row["name"]}
+        )
+    return usage
+
+
+_TAGS_SQL = "SELECT tag, note FROM best_practice_tag ORDER BY tag"
+
+_REFERENCES_SQL = """
+    SELECT id, tag, provider, title, note, reference_url
+    FROM best_practice_reference
+    WHERE tag = ANY(%(tags)s)
+    ORDER BY tag, ord
+"""
+
+
+def list_best_practice_tags(conn) -> list[dict]:
+    """The closed tag vocabulary a caller must select from before matching —
+    same role `kg.role_catalog` plays for `roles`."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute("SET search_path TO project_catalog, public")
+        cur.execute(_TAGS_SQL)
+        return cur.fetchall()
+
+
+def best_practices(conn, tags: list[str]) -> list[dict]:
+    """Reference rows for the given tags. Empty tags -> empty list, not a query."""
+    if not tags:
+        return []
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute("SET search_path TO project_catalog, public")
+        cur.execute(_REFERENCES_SQL, {"tags": tags})
+        return cur.fetchall()

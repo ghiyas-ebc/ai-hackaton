@@ -87,6 +87,16 @@ def test_past_project_tools_are_explorer_only():
     assert not past_project_tools & _tools_of(curator_agent)
 
 
+def test_capability_assessment_tools_are_explorer_only():
+    """Capability assessment reads project history and the graph's own
+    equivalence data — no verdict tool, no writer, explorer's job only.
+    """
+    capability_tools = {tools.assess_capability, tools.list_best_practice_tags}
+    assert capability_tools <= _tools_of(explorer_agent)
+    assert not capability_tools & _tools_of(validator_agent)
+    assert not capability_tools & _tools_of(curator_agent)
+
+
 def test_all_tools_is_the_union_of_what_agents_actually_hold():
     """Otherwise the exposure surface the other tests assert on is fiction."""
     union = (

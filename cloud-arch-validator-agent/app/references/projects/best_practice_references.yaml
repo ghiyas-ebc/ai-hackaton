@@ -1,0 +1,36 @@
+# A principal's own published reference architectures, for the capability
+# assessment feature to cite when the company has no delivery history of its
+# own. Hand-authored, like past_projects.yaml — never generated. See
+# db/migrations/0008_best_practice_references.sql for why this data lives in
+# project_catalog rather than kg, and why it is matched by tag rather than
+# by service id.
+#
+# Kept in its own file, separate from past_projects.yaml, even though both
+# feed project_catalog: one is our history, the other is vendor knowledge.
+# Mixing them in one file would blur that distinction.
+#
+# `tags` is the closed vocabulary a caller must select from
+# (list_best_practice_tags) — never invent one. `references` list order
+# becomes each reference's `ord`, for stable listing when more than one
+# reference shares a tag.
+
+tags:
+  - tag: agentic_app
+    note: >
+      Conversational or autonomous AI agents needing persistent memory or
+      state across sessions or users.
+
+references:
+  - id: gcp-agentic-app-reference-architecture
+    tag: agentic_app
+    provider: gcp
+    title: "GCP reference pattern: Agent Runtime + Memory Bank"
+    note: >
+      GCP's own recommended pattern for a production agentic application:
+      Agent Runtime for execution, Memory Bank for persistent
+      cross-session/user memory, both integrable with Gemini Enterprise for
+      the user-facing surface. This is principal guidance, not something the
+      company has delivered — cite it only when there is no internal Proven
+      or Partial Proven evidence, and say plainly that it is a vendor
+      pattern, not our own track record.
+    reference_url: null
