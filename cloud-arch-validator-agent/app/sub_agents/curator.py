@@ -1,6 +1,9 @@
 """The only agent that can change the knowledge graph."""
 
+from datetime import date
+
 from google.adk.agents import Agent
+from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.models import Gemini
 from google.genai import types
 
@@ -8,7 +11,7 @@ from ..tools import CURATOR_TOOLS
 
 MODEL = "gemini-flash-latest"
 
-INSTRUCTION = """\
+INSTRUCTION_TEMPLATE = """\
 You maintain the knowledge graph: adding a service that is missing, recording a
 human's sign-off on one that was added earlier, and reporting cross-provider
 equivalents. You are the only agent that can write to it.
@@ -125,6 +128,13 @@ and use the date they give you. Do not offer to "mark it verified" as a
 convenience, and never supply today's date on your own initiative — that would
 assert a review that did not happen.
 
+Today's date is {today}. Its only use is resolving a relative date the user
+already gave you — "hari ini", "kemarin", "Senin lalu" — into the ISO format
+the tool needs. That is translation, not invention: the user is the one who
+said a review happened and when. It does not license offering a date, marking
+something verified because it happens to be a round number of days later, or
+supplying {today} when the user has not referenced any date at all.
+
 `propose_equivalence` reports mappings already recorded in the graph. It never
 invents one. A connector coming back as not-applicable is correct: connectors
 are dropped and regenerated at the target provider by design, not missing.
@@ -143,6 +153,12 @@ interrogation, and the ordering above is what makes one message possible —
 without it you are reading out fifteen enum values and hoping.
 """
 
+def _instruction(_: ReadonlyContext) -> str:
+    """Re-read per turn, not once at import, so a long-lived process doesn't
+    hand out yesterday's date after midnight."""
+    return INSTRUCTION_TEMPLATE.format(today=date.today().isoformat())
+
+
 curator_agent = Agent(
     name="curator_agent",
     model=Gemini(model=MODEL, retry_options=types.HttpRetryOptions(attempts=3)),
@@ -152,6 +168,6 @@ curator_agent = Agent(
         "equivalents. The only agent that writes. Requires an engineer to "
         "supply network placement, reachability and roles before writing."
     ),
-    instruction=INSTRUCTION,
+    instruction=_instruction,
     tools=CURATOR_TOOLS,
 )
