@@ -15,9 +15,14 @@ def test_converted_dataset_preserves_source_cases():
     # genuine Shape-B continuation of E02 (see test below), and E10-E13 close a
     # coverage gap -- curator_agent's write path (add/typo-refusal/role-warning)
     # and explorer_agent's typed query + health tools had zero eval cases.
+    # 16 as of 2026-08-17: E14-E15 close a second coverage gap -- the
+    # project_catalog capability-assessment tools (assess_capability,
+    # search_past_projects, list_best_practice_tags) had zero eval cases, so
+    # nothing exercised distinguishing a Proven delivered-project match from a
+    # Theoretical pattern backed only by a principal reference architecture.
     validate()
-    assert len(load_source()) == 14
-    assert len(load_target()) == 14
+    assert len(load_source()) == 16
+    assert len(load_target()) == 16
 
 
 def test_converted_dataset_has_unique_ids_and_all_assertions():

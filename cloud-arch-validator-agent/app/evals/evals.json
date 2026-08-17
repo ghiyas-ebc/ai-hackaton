@@ -153,6 +153,28 @@
         "reports whatever the filtered search actually returns, including an empty result, without relaxing the stated filter",
         "replies in Indonesian"
       ]
+    },
+    {
+      "id": "E14-capability-proven",
+      "prompt": "Klien mau bikin aplikasi absensi karyawan pakai face recognition di GCP -- load balancer, Cloud Run, Cloud SQL, terus Vertex AI buat face embedding dan Vector Search buat cari kecocokan wajah. Kita udah pernah ngerjain yang kayak gini belum?",
+      "assertions": [
+        "calls assess_capability or search_past_projects rather than answering from general knowledge",
+        "reports the overall capability tier as Proven, not a hedge like 'should be possible'",
+        "cites at least one real delivered project by name (Sodagr or Identiqo) as the evidence, not just a confident yes",
+        "does not invent or reference a past project that is not actually in the project catalog",
+        "replies in Indonesian"
+      ]
+    },
+    {
+      "id": "E15-capability-theoretical-with-reference",
+      "prompt": "Klien nanya apa kita bisa bikin sistem multi-agent AI di GCP -- beberapa agent kerja bareng, komunikasi lewat Pub/Sub. Kesiapan kita gimana?",
+      "assertions": [
+        "calls assess_capability with pattern_tags covering multi-agent systems (checking list_best_practice_tags first if unsure of the exact tag) rather than answering from general knowledge",
+        "reports the overall tier as Theoretical or Not Owned, not Proven, since no delivered project matches the full multi-agent-orchestration pattern",
+        "does not overclaim proven delivery experience for multi-agent orchestration merely because individual components like Cloud Run or Gemini test Proven elsewhere",
+        "cites Google's own multi-agent reference architecture and is explicit that it is vendor/principal guidance, not the company's own track record",
+        "replies in Indonesian"
+      ]
     }
   ]
 }

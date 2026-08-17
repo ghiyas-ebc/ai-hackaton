@@ -732,3 +732,65 @@ services:
   provenance:
     generated: manual
     status: manual
+- id: gemini-api
+  name: Gemini API
+  provider: gcp
+  category: ai_ml
+  tier: serverless
+  roles:
+  - ml_platform
+  - generative_ai
+  - llm
+  - multimodal
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: global
+  references_url: https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models
+  provenance:
+    generated: agent:kg-curator
+    status: verified
+    verified: 2026-08-17
+    sources:
+    - https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models
+- id: vertex-ai-vector-search
+  name: Vertex AI Vector Search
+  provider: gcp
+  category: ai_ml
+  tier: managed
+  roles:
+  - datastore
+  - vector_database
+  - similarity_search
+  - embeddings
+  - ann_index
+  network_placement: managed_service
+  reachability: public_or_private
+  region_scope: regional
+  references_url: https://cloud.google.com/vertex-ai/docs/vector-search/overview
+  provenance:
+    generated: agent:kg-curator
+    status: verified
+    verified: 2026-08-17
+    sources:
+    - https://cloud.google.com/vertex-ai/docs/vector-search/overview
+- id: vertex-ai-search
+  name: Vertex AI Search
+  provider: gcp
+  category: ai_ml
+  tier: serverless
+  roles:
+  - ml_platform
+  - enterprise_search
+  - rag
+  - agent_builder
+  - discovery_engine
+  network_placement: managed_service
+  reachability: api_endpoint
+  region_scope: global
+  references_url: https://docs.cloud.google.com/generative-ai-app-builder/docs
+  provenance:
+    generated: agent:kg-curator
+    status: verified
+    verified: 2026-08-17
+    sources:
+    - https://docs.cloud.google.com/generative-ai-app-builder/docs

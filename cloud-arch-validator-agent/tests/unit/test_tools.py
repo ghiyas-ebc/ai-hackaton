@@ -179,9 +179,9 @@ def test_search_past_projects_with_no_match_is_a_real_empty_answer() -> None:
 
 
 def test_search_past_projects_filters_narrow_independently() -> None:
-    by_tag = tools.search_past_projects(tag="fintech")
+    by_tag = tools.search_past_projects(tag="chatbot-ai")
     assert by_tag["count"] == 1
-    assert by_tag["projects"][0]["id"] == "fintechco-azure-data-platform"
+    assert by_tag["projects"][0]["id"] == "dev-rag-pi"
 
     by_provider = tools.search_past_projects(provider="gcp")
     assert by_provider["count"] >= 1
@@ -189,8 +189,7 @@ def test_search_past_projects_filters_narrow_independently() -> None:
 
     by_service = tools.search_past_projects(service_id="cloud-sql")
     assert by_service["count"] >= 1
-    assert any(p["id"] == "retailco-cloud-platform-migration"
-               for p in by_service["projects"])
+    assert any(p["id"] == "sodagr-ebco" for p in by_service["projects"])
 
 
 def test_get_past_project_reports_a_missing_id_not_an_error() -> None:
@@ -199,15 +198,19 @@ def test_get_past_project_reports_a_missing_id_not_an_error() -> None:
 
 
 def test_get_past_project_with_connections_draws_a_chart() -> None:
-    result = tools.get_past_project("retailco-cloud-platform-migration")
+    result = tools.get_past_project("sodagr-ebco")
     assert result["found"] is True
     assert "│" in result["diagram"] and "▼" in result["diagram"]
 
 
-def test_get_past_project_with_no_connections_reports_nothing_to_draw() -> None:
-    result = tools.get_past_project("fintechco-azure-data-platform")
-    assert result["found"] is True
-    assert result["diagram"] == "[NO_CONNECTIONS] Nothing to draw."
+def test_get_past_project_diagram_reports_nothing_to_draw_when_empty() -> None:
+    """[NO_CONNECTIONS] is `project_render.build_diagram`'s own fallback for an
+    empty connections list — pure, no DB needed. Every real project currently
+    in the catalog has connections, so this checks the render layer directly
+    rather than depending on the catalog happening to contain an empty one."""
+    from app.project_lib.render import build_diagram
+
+    assert build_diagram([], {}) == "[NO_CONNECTIONS] Nothing to draw."
 
 
 def test_list_best_practice_tags_includes_the_seeded_tag() -> None:
@@ -218,9 +221,8 @@ def test_list_best_practice_tags_includes_the_seeded_tag() -> None:
 def test_assess_capability_exact_match_is_proven() -> None:
     result = tools.assess_capability("cloud-sql")
     assert result["overall_tier"] == "Proven"
-    assert result["components"][0]["evidence"][0]["project_id"] == (
-        "retailco-cloud-platform-migration"
-    )
+    evidence_ids = {e["project_id"] for e in result["components"][0]["evidence"]}
+    assert "sodagr-ebco" in evidence_ids
 
 
 def test_assess_capability_close_equivalent_is_partial_proven() -> None:

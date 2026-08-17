@@ -31,9 +31,15 @@
 # no caller can route around it.
 
 roles:
+  agent_builder:
+    kind: descriptive
+    note: Names the console family Vertex AI Search ships under; no rule matches it.
   analytics_sink:
     kind: load_bearing
     note: Matched by CONN-PROCESSING-TO-SINK as a pipeline's target.
+  ann_index:
+    kind: descriptive
+    note: Describes the indexing technique on Vertex AI Vector Search; no rule matches it.
   batch_etl:
     kind: descriptive
     note: Describes the processing style; data_processing is what rules match.
@@ -73,6 +79,9 @@ roles:
     kind: descriptive
     note: Describes the policy's function; where it may attach is decided by network_placement
       = policy.
+  discovery_engine:
+    kind: descriptive
+    note: Names the underlying API Vertex AI Search is built on; no rule matches it.
   document_db:
     kind: descriptive
     note: Describes the database model; datastore is what rules match.
@@ -80,6 +89,12 @@ roles:
     kind: load_bearing
     note: Matched by CONN-EDGE-TO-HTTP, CONN-EDGE-TO-NON-HTTP and CONN-POLICY-ATTACH-VALID.
       SEC-003 fires on its absence.
+  embeddings:
+    kind: descriptive
+    note: Describes the data shape stored on Vertex AI Vector Search; no rule matches it.
+  enterprise_search:
+    kind: descriptive
+    note: Describes the product category on Vertex AI Search; ml_platform is what rules match.
   event_consumer:
     kind: load_bearing
     note: Matched by CONN-MESSAGING-TO-PROCESSING and by verdict_card's tech-mismatch rules.
@@ -93,6 +108,9 @@ roles:
   function_runtime:
     kind: descriptive
     note: Describes how the compute runs; compute is what rules match.
+  generative_ai:
+    kind: descriptive
+    note: Describes the model's function on Gemini API; ml_platform is what rules match.
   global_scale_db:
     kind: descriptive
     note: Describes the database's reach; region_scope is the field rules read.
@@ -102,6 +120,9 @@ roles:
   kubernetes:
     kind: load_bearing
     note: Matched by CONN-K8S-TO-RELATIONAL-DB and CONN-K8S-TO-SECRET.
+  llm:
+    kind: descriptive
+    note: Describes the model type on Gemini API; ml_platform is what rules match.
   load_balancer_l4:
     kind: descriptive
     note: Describes the layer it balances at. Only load_balancer_l7 is matched, because a
@@ -118,6 +139,9 @@ roles:
   ml_platform:
     kind: load_bearing
     note: Matched by CONN-PROCESSING-TO-SINK.
+  multimodal:
+    kind: descriptive
+    note: Describes an input-format capability on Gemini API; no rule matches it.
   network_fabric:
     kind: descriptive
     note: Describes the node. Rules match network_fabric as a network_placement, not as a
@@ -137,6 +161,10 @@ roles:
   private_endpoint:
     kind: descriptive
     note: Describes the connector's mechanism; connector is what rules match.
+  rag:
+    kind: descriptive
+    note: Describes a usage pattern (retrieval-augmented generation) on Vertex AI Search;
+      no rule matches it.
   relational_db:
     kind: load_bearing
     note: Matched by CONN-K8S-TO-RELATIONAL-DB.
@@ -147,9 +175,16 @@ roles:
     kind: load_bearing
     note: The needs_role on every NEEDS_COMPONENT rule, resolved to a concrete service of
       the target provider with by_role(...)[0].
+  similarity_search:
+    kind: descriptive
+    note: Describes the query pattern on Vertex AI Vector Search; no rule matches it.
   stream_processing:
     kind: load_bearing
     note: Matched by verdict_card's tech-mismatch rules.
+  vector_database:
+    kind: descriptive
+    note: Describes the database model on Vertex AI Vector Search; datastore is what rules
+      match.
   vm:
     kind: descriptive
     note: Describes the compute unit; compute is what rules match.

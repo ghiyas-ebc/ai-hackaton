@@ -20,47 +20,129 @@
 # name where confidentiality requires it. The schema does not enforce
 # either way.
 
-- id: retailco-cloud-platform-migration
-  name: "RetailCo — Cloud Platform Migration"
+- id: sodagr-ebco
+  name: "Sodagr"
   description: >
-    Migrated an on-prem retail e-commerce platform to GCP. Public traffic
-    terminates at a load balancer in front of Cloud Run, which reads and
-    writes to a private-IP Cloud SQL instance through a serverless VPC
-    connector.
-  use_case: "Retail e-commerce replatforming"
-  started_at: 2023-01-15
-  ended_at: 2023-09-30
-  client_name: "Regional Retail Chain (NDA)"
-  tags: [retail, ecommerce, gcp, replatform]
+    Sodagr adalah aplikasi kehadiran karyawan berbasis pengenalan wajah,
+    memastikan absensi akurat dan efisien. Dilengkapi fitur manajemen tugas
+    dan kalender terintegrasi Google API, aplikasi ini membantu pengguna
+    mengatur jadwal, mengingatkan aktivitas penting, dan meningkatkan
+    produktivitas dengan antarmuka yang intuitif. Cloud Run hosts four
+    logical services (front end, back end, AI orchestration, face
+    recognition) — the graph has one cloud-run id, so all four collapse to
+    one node here. Cloud SQL sits behind a serverless VPC connector on a
+    private IP, and credentials are read from Secret Manager. Vertex AI
+    stands in for the custom face-embedding model (online prediction);
+    Vertex AI Vector Search backs face-embedding lookup; Gemini is the LLM
+    used by the AI service.
+  use_case: "Employee attendance and task management"
+  started_at: 2024-01-01
+  ended_at:
+  client_name: "Koperasi Pegawai PT Bank Mandiri (Persero) Tbk"
+  tags: [face-recognition, employee-attendance, task-management, cloud-run, vertex-ai]
   members:
-    - {name: "Jane Doe", role_on_project: "Lead Architect"}
-    - {name: "John Smith", role_on_project: "Delivery PM"}
+    - {name: "Luqman", role_on_project: "Mobile Developer"}
+    - {name: "Dzikri", role_on_project: "Backend Engineer"}
+    - {name: "Guntur", role_on_project: "System Analyst"}
   services:
     - cloud-load-balancing
+    - cloud-armor
     - cloud-run
     - serverless-vpc-access
     - cloud-sql
+    - secret-manager
+    - vertex-ai
+    - vertex-ai-vector-search
+    - gemini-api
   connections:
-    - {source: cloud-load-balancing, target: cloud-run, note: "HTTPS ingress"}
+    - {source: cloud-load-balancing, target: cloud-run, note: "public ingress to the front-end service"}
     - {source: cloud-run, target: serverless-vpc-access, note: "private egress into the VPC"}
-    - {source: serverless-vpc-access, target: cloud-sql, note: "private IP, no public endpoint"}
+    - {source: serverless-vpc-access, target: cloud-sql, note: "private IP, no public endpoint; back-end, AI and face-recognition services all read/write Cloud SQL"}
+    - {source: cloud-run, target: secret-manager, note: "DB and API credentials read from Secret Manager, not env vars"}
+    - {source: cloud-run, target: gemini-api, note: "AI service calls the Gemini LLM"}
+    - {source: serverless-vpc-access, target: vertex-ai-vector-search, note: "face-recognition service queries the face-embedding vector index over a private path"}
+    - {source: cloud-run, target: vertex-ai, note: "face-recognition service calls the face-embedding online prediction model"}
 
-- id: fintechco-azure-data-platform
-  name: "FintechCo — Azure Data Platform Assessment"
+- id: dev-rag-pi
+  name: "Data Insight AI"
   description: >
-    A scoping engagement cataloguing candidate services for a future Azure
-    data platform (Cosmos DB, Synapse, Event Grid). Ended at the proposal
-    stage — no architecture was built or connected, so there is nothing to
-    diagram yet.
-  use_case: "Data platform feasibility assessment"
-  started_at: 2024-03-01
-  ended_at: 2024-04-12
-  client_name: "Mid-size Fintech (NDA)"
-  tags: [fintech, azure, assessment]
+    Dalam upaya meningkatkan efisiensi operasional, PT Pupuk Indonesia
+    menerapkan Knowledge Management berbasis RAG untuk mengelola root
+    cause analysis di berbagai pabriknya. Solusi ini dirancang untuk
+    mempermudah tim terkait dalam mengidentifikasi dan menganalis
+    permasalahan pada peralatan pabrik. Dengan implementasi ini, tim
+    dapat dengan cepat dan akurat mengakses dokumen yang relevan,
+    sehingga mempercepat proses pengambilan keputusan dan perbaikan.
+    Cloud Run hosts three logical services (front end, back end, AI
+    orchestration) — the graph has one cloud-run id, so all three
+    collapse to one node here. Cloud SQL sits behind a serverless VPC
+    connector on a private IP, and credentials are read from Secret
+    Manager. Vertex AI Search backs RAG document retrieval; Gemini is the
+    LLM used by the AI service.
+  use_case: "Chatbot AI with RAG"
+  started_at: 2024-10-01
+  ended_at:
+  client_name: "Pupuk Indonesia"
+  tags: [chatbot-ai, rag, cloud-run, vertex-ai, gemini]
   members:
-    - {name: "Priya Nair", role_on_project: "Solutions Architect"}
+    - {name: "Amanda", role_on_project: "Cloud Engineer"}
+    - {name: "Yoris", role_on_project: "Cloud Engineer"}
+    - {name: "Ardian", role_on_project: "System Analyst"}
   services:
-    - azure-cosmos-db
-    - azure-synapse
-    - azure-event-grid
-  connections: []
+    - cloud-load-balancing
+    - cloud-armor
+    - cloud-run
+    - serverless-vpc-access
+    - cloud-sql
+    - secret-manager
+    - vertex-ai-search
+    - gemini-api
+  connections:
+    - {source: cloud-load-balancing, target: cloud-run, note: "public ingress to the front-end service"}
+    - {source: cloud-run, target: serverless-vpc-access, note: "private egress into the VPC"}
+    - {source: serverless-vpc-access, target: cloud-sql, note: "private IP, no public endpoint; back-end and AI services both read/write Cloud SQL"}
+    - {source: cloud-run, target: secret-manager, note: "DB and API credentials read from Secret Manager, not env vars"}
+    - {source: cloud-run, target: gemini-api, note: "AI service calls the Gemini LLM"}
+    - {source: cloud-run, target: vertex-ai-search, note: "AI service queries Vertex AI Search for RAG document retrieval"}
+
+- id: subsidi-tepat-bbm-ai
+  name: "Identiqo"
+  description: >
+    Solusi cerdas yang dapat mengamankan proses bisnis dengan mendeteksi
+    kecurangan sebelum data diri seperti KTP tersimpan. Pemantauan
+    real-time dan analisis mendalam pada foto. Solusi ini memastikan
+    integritas informasi, menjaga transparansi, serta meningkatkan
+    efisiensi operasional. Cloud Run hosts two logical services (AI
+    orchestration, face recognition) — the graph has one cloud-run id, so
+    both collapse to one node here. Cloud SQL sits behind a serverless
+    VPC connector on a private IP, and credentials are read from Secret
+    Manager. Vertex AI stands in for the custom face-embedding model
+    (online prediction); Vertex AI Vector Search backs face-embedding
+    lookup; Gemini is the LLM used by the AI service.
+  use_case: "Validasi Registrasi User"
+  started_at: 2024-08-01
+  ended_at:
+  client_name: "Pertamina Patra Niaga"
+  tags: [id-card-validation, ai-validation, face-recognition, cloud-run, vertex-ai, gemini]
+  members:
+    - {name: "Amanda", role_on_project: "Cloud Engineer"}
+    - {name: "Ghiyas", role_on_project: "Cloud Engineer"}
+    - {name: "Ardian", role_on_project: "System Analyst"}
+  services:
+    - cloud-load-balancing
+    - cloud-armor
+    - cloud-run
+    - serverless-vpc-access
+    - cloud-sql
+    - secret-manager
+    - vertex-ai
+    - vertex-ai-vector-search
+    - gemini-api
+  connections:
+    - {source: cloud-load-balancing, target: cloud-run, note: "public ingress to the front-end service"}
+    - {source: cloud-run, target: serverless-vpc-access, note: "private egress into the VPC"}
+    - {source: serverless-vpc-access, target: cloud-sql, note: "private IP, no public endpoint; AI and face-recognition services both read/write Cloud SQL"}
+    - {source: cloud-run, target: secret-manager, note: "DB and API credentials read from Secret Manager, not env vars"}
+    - {source: cloud-run, target: gemini-api, note: "AI service calls the Gemini LLM"}
+    - {source: serverless-vpc-access, target: vertex-ai-vector-search, note: "face-recognition service queries the face-embedding vector index over a private path"}
+    - {source: cloud-run, target: vertex-ai, note: "face-recognition service calls the face-embedding online prediction model"}
